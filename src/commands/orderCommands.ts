@@ -14,10 +14,19 @@ import BN from "bn.js";
 export async function listOrders(
   quoteToken: string | undefined,
   baseToken: string | undefined,
+  filterOutRemainingLamportsAmountBaseToken: string | undefined,
+  filterOutRemainingLamportsAmountQuoteToken: string | undefined,
 ) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
+
+  const filterOutBaseDecimalAmount = filterOutRemainingLamportsAmountBaseToken
+    ? new Decimal(filterOutRemainingLamportsAmountBaseToken)
+    : new Decimal(0);
+  const filterOutQuoteDecimalAmount = filterOutRemainingLamportsAmountQuoteToken
+    ? new Decimal(filterOutRemainingLamportsAmountQuoteToken)
+    : new Decimal(0);
 
   let quote = new PublicKey((quoteToken ?? process.env.QUOTE_TOKEN)!);
   let base = new PublicKey((baseToken ?? process.env.BASE_TOKEN)!);
@@ -82,6 +91,14 @@ export async function listOrders(
     let quoteUiAmount = lamportsToAmountDecimal(quoteAmount, quoteDecimals);
     let baseUiAmount = lamportsToAmountDecimal(baseAmount, baseDecimals);
 
+    if (baseUiAmount.lt(filterOutBaseDecimalAmount)) {
+      continue;
+    }
+
+    if (quoteUiAmount.lt(filterOutQuoteDecimalAmount)) {
+      continue;
+    }
+
     let price = baseUiAmount.div(quoteUiAmount);
     let quoteDisplay = quoteToken.slice(0, 4);
     let baseDisplay = baseToken.slice(0, 4);
@@ -113,6 +130,14 @@ export async function listOrders(
     let quoteUiAmount = lamportsToAmountDecimal(quoteAmount, quoteDecimals);
     let baseUiAmount = lamportsToAmountDecimal(baseAmount, baseDecimals);
 
+    if (baseUiAmount.lt(filterOutBaseDecimalAmount)) {
+      continue;
+    }
+
+    if (quoteUiAmount.lt(filterOutQuoteDecimalAmount)) {
+      continue;
+    }
+
     let price = baseUiAmount.div(quoteUiAmount);
     let quoteDisplay = quoteToken.slice(0, 4);
     let baseDisplay = baseToken.slice(0, 4);
@@ -139,12 +164,12 @@ export async function listOrders(
     console.log(
       red("ASK"),
       "Price",
-      order.price.toFixed(5),
+      order.price.toFixed(5).padEnd(15, " "),
       "| Sell",
-      order.quoteUiAmount.toFixed(5).padStart(9, " "),
+      order.quoteUiAmount.toFixed(5).padStart(15, " "),
       order.quoteDisplay,
       "| For",
-      order.baseUiAmount.toFixed(5).padStart(15, " "),
+      order.baseUiAmount.toFixed(5).padStart(20, " "),
       order.baseDisplay,
       "| OrderId",
       order.orderAddress.toString(),
@@ -155,12 +180,12 @@ export async function listOrders(
     console.log(
       green("BID"),
       "Price",
-      order.price.toFixed(5),
-      "| Buy",
-      order.quoteUiAmount.toFixed(5).padStart(10, " "),
+      order.price.toFixed(5).padEnd(15, " "),
+      "| Buy ",
+      order.quoteUiAmount.toFixed(5).padStart(15, " "),
       order.quoteDisplay,
       "| For",
-      order.baseUiAmount.toFixed(5).padStart(15, " "),
+      order.baseUiAmount.toFixed(5).padStart(20, " "),
       order.baseDisplay,
       "| OrderId",
       order.orderAddress.toString(),
@@ -354,7 +379,7 @@ export async function listOrdersForUser(user: PublicKey) {
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
+  const env = initializeClient(rpc!, admin, getLimoProgramId(rpc!), false);
   const client = new LimoClient(
     env.provider.connection,
     new PublicKey(globalConfig!),

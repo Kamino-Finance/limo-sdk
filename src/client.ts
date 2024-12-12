@@ -152,18 +152,38 @@ async function main() {
 
   commands
     .command("list-orders-for-user")
-    .option("--user <string>", "User address")
+    .requiredOption("--user <string>", "User address")
     .action(async ({ user }) => {
       await listOrdersForUser(new PublicKey(user));
     });
 
   commands
     .command("list-orders")
-    .option("--quote <string>")
-    .option("--base <string>")
-    .action(async ({ quote, base }) => {
-      await listOrders(quote, base);
-    });
+    .requiredOption("--quote <string>")
+    .requiredOption("--base <string>")
+    .option(
+      "--filter-out-remaining-amount-base-token <string>",
+      "Filter out orders with remaining amount less than the provided value for the base token",
+    )
+    .option(
+      "--filter-out-remaining-amount-quote-token <string>",
+      "Filter out orders with remaining amount less than the provided value for the quote token",
+    )
+    .action(
+      async ({
+        quote,
+        base,
+        filterOutRemainingAmountBaseToken,
+        filterOutRemainingAmountQuoteToken,
+      }) => {
+        await listOrders(
+          quote,
+          base,
+          filterOutRemainingAmountBaseToken,
+          filterOutRemainingAmountQuoteToken,
+        );
+      },
+    );
 
   commands.command("listen-to-order-changes").action(async () => {
     await listenToOrderChanges();

@@ -43,9 +43,6 @@ export function setUpProgram(args: {
   if (!args.clusterOverride) {
     throw new Error("Cluster is required");
   }
-  if (!args.adminFilePath) {
-    throw new Error("Admin is required");
-  }
 
   const cluster = args.clusterOverride;
   const config: ConnectionConfig = {
@@ -54,7 +51,9 @@ export function setUpProgram(args: {
   };
   const connection = new Connection(endpointFromCluster(cluster), config);
 
-  const payer = parseKeypairFile(args.adminFilePath);
+  const payer = args.adminFilePath
+    ? parseKeypairFile(args.adminFilePath)
+    : Keypair.generate();
   // @ts-ignore
   const wallet = new anchor.Wallet(payer);
   const provider = new anchor.AnchorProvider(

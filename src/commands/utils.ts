@@ -17,7 +17,7 @@ export function createAddExtraComputeUnitFeeTransaction(
 
 export function initializeClient(
   cluster: string,
-  admin: string,
+  admin: string | undefined,
   programId: PublicKey,
   multisig: boolean,
   debug: boolean = false,
@@ -34,12 +34,13 @@ export function initializeClient(
   if (admin) {
     resolvedAdmin = admin;
   } else {
-    throw "Must specify admin";
+    console.log("Running without an admin keypair!");
+    resolvedAdmin = "";
   }
 
   // Get connection first
   const env: Env = setUpProgram({
-    adminFilePath: admin,
+    adminFilePath: resolvedAdmin,
     clusterOverride: cluster,
     programOverride: programId,
   });
