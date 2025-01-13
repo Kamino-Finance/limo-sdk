@@ -35,7 +35,10 @@ export type CustomError =
   | IntermediaryOutputTokenAccountRequired
   | NotEnoughBalanceForRent
   | NotEnoughTimePassedSinceLastUpdate
-  | OrderSameMint;
+  | OrderSameMint
+  | UnsupportedTokenExtension
+  | InvalidTokenAccount
+  | OrderTypeInvalid;
 
 export class OrderCanNotBeCanceled extends Error {
   static readonly code = 6000;
@@ -459,6 +462,39 @@ export class OrderSameMint extends Error {
   }
 }
 
+export class UnsupportedTokenExtension extends Error {
+  static readonly code = 6037;
+  readonly code = 6037;
+  readonly name = "UnsupportedTokenExtension";
+  readonly msg = "Mint has a token (2022) extension that is not supported";
+
+  constructor(readonly logs?: string[]) {
+    super("6037: Mint has a token (2022) extension that is not supported");
+  }
+}
+
+export class InvalidTokenAccount extends Error {
+  static readonly code = 6038;
+  readonly code = 6038;
+  readonly name = "InvalidTokenAccount";
+  readonly msg = "Can't have an spl token mint with a t22 account";
+
+  constructor(readonly logs?: string[]) {
+    super("6038: Can't have an spl token mint with a t22 account");
+  }
+}
+
+export class OrderTypeInvalid extends Error {
+  static readonly code = 6039;
+  readonly code = 6039;
+  readonly name = "OrderTypeInvalid";
+  readonly msg = "The order type is invalid";
+
+  constructor(readonly logs?: string[]) {
+    super("6039: The order type is invalid");
+  }
+}
+
 export function fromCode(code: number, logs?: string[]): CustomError | null {
   switch (code) {
     case 6000:
@@ -535,6 +571,12 @@ export function fromCode(code: number, logs?: string[]): CustomError | null {
       return new NotEnoughTimePassedSinceLastUpdate(logs);
     case 6036:
       return new OrderSameMint(logs);
+    case 6037:
+      return new UnsupportedTokenExtension(logs);
+    case 6038:
+      return new InvalidTokenAccount(logs);
+    case 6039:
+      return new OrderTypeInvalid(logs);
   }
 
   return null;

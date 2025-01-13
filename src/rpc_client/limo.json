@@ -1066,6 +1066,11 @@
           "index": false
         },
         {
+          "name": "onEventTipAmount",
+          "type": "u64",
+          "index": false
+        },
+        {
           "name": "orderType",
           "type": "u8",
           "index": false
@@ -1268,6 +1273,21 @@
       "code": 6036,
       "name": "OrderSameMint",
       "msg": "Order input and output mints are the same"
+    },
+    {
+      "code": 6037,
+      "name": "UnsupportedTokenExtension",
+      "msg": "Mint has a token (2022) extension that is not supported"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidTokenAccount",
+      "msg": "Can't have an spl token mint with a t22 account"
+    },
+    {
+      "code": 6039,
+      "name": "OrderTypeInvalid",
+      "msg": "The order type is invalid"
     }
   ]
 }
