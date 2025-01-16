@@ -155,8 +155,27 @@ export async function getMintDecimals(
   connection: Connection,
   mint: PublicKey,
 ): Promise<number> {
-  let info = await getMint(connection, mint);
+  const mintProgramOwner = await getMintsProgramOwner(connection, mint);
+  let info = await getMint(
+    connection,
+    mint,
+    connection.commitment,
+    mintProgramOwner,
+  );
   return info.decimals;
+}
+
+export async function getMintsProgramOwner(
+  connection: Connection,
+  mint: PublicKey,
+): Promise<PublicKey> {
+  const mintAccount = await connection.getAccountInfo(mint);
+
+  if (!mintAccount) {
+    throw new Error("Mint not found");
+  }
+
+  return mintAccount.owner;
 }
 
 async function createMintInstructions(
