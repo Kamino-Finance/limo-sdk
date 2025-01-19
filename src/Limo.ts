@@ -1108,14 +1108,16 @@ export class LimoClient {
     user: PublicKey,
     mint: PublicKey,
     mintTokenProgramId?: PublicKey,
-    globalConfigOverride?: PublicKey,
   ): Promise<TransactionInstruction> {
     const mintProgramId = mintTokenProgramId
       ? mintTokenProgramId
       : (await this.getMintsProgramOwners([mint]))[0];
+
+    const globalConfigState = await this.getGlobalConfigState();
+
     return limoOperations.initializeVault(
-      user,
-      globalConfigOverride ? globalConfigOverride : this._globalConfig,
+      globalConfigState!.adminAuthority,
+      this._globalConfig,
       mint,
       this.programId,
       mintProgramId,
@@ -1136,19 +1138,13 @@ export class LimoClient {
     mint: PublicKey,
     mode: string = "execute",
     mintTokenProgramId?: PublicKey,
-    globalConfigOverride?: PublicKey,
   ): Promise<TransactionSignature> {
     const ix = await this.initializeVaultIx(
       user.publicKey,
       mint,
       mintTokenProgramId,
-      globalConfigOverride,
     );
-    const vault = getTokenVaultPDA(
-      this.programId,
-      globalConfigOverride ? globalConfigOverride : this._globalConfig,
-      mint,
-    );
+    const vault = getTokenVaultPDA(this.programId, this._globalConfig, mint);
 
     const log = "Initialize Vault: " + vault.toString();
     return this.processTxn(user, [ix], mode, log, [user]);
