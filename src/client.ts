@@ -16,7 +16,12 @@ import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import fs from "fs";
 import path from "path";
-import { initGlobalConfigCommand, initVault } from "./commands/initCommands";
+import {
+  getKaminoTokenMintsFromApi,
+  initGlobalConfigCommand,
+  initVault,
+  initVaultsFromMintsListFile,
+} from "./commands/initCommands";
 import dotenv from "dotenv";
 import {
   placeOrder,
@@ -65,6 +70,20 @@ async function main() {
       await initVault(new PublicKey(mint), mode);
     });
 
+  commands
+    .command("init-vaults-from-mints-list")
+    .requiredOption("--mints-list-file-path <string>")
+    .requiredOption(
+      "--mode <string>",
+      "multisig - will print bs58 txn only, simulate - will print bs64 txn explorer link and simulation, execute - to execute txn",
+    )
+    .action(async ({ mintsListFilePath, mode }) => {
+      await initVaultsFromMintsListFile(mintsListFilePath, mode);
+    });
+
+  commands.command("get-kamino-token-mints").action(async () => {
+    await getKaminoTokenMintsFromApi();
+  });
   commands
     .command("update-global-config")
     .requiredOption(
