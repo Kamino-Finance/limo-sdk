@@ -27,7 +27,7 @@
       "name": "initializeVault",
       "accounts": [
         {
-          "name": "adminAuthority",
+          "name": "payer",
           "isMut": true,
           "isSigner": true
         },

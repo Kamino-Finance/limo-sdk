@@ -9,7 +9,7 @@ import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-
 import { PROGRAM_ID } from "../programId";
 
 export interface InitializeVaultAccounts {
-  adminAuthority: PublicKey;
+  payer: PublicKey;
   globalConfig: PublicKey;
   pdaAuthority: PublicKey;
   mint: PublicKey;
@@ -23,7 +23,7 @@ export function initializeVault(
   programId: PublicKey = PROGRAM_ID,
 ) {
   const keys: Array<AccountMeta> = [
-    { pubkey: accounts.adminAuthority, isSigner: true, isWritable: true },
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
     { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
     { pubkey: accounts.pdaAuthority, isSigner: false, isWritable: false },
     { pubkey: accounts.mint, isSigner: false, isWritable: false },

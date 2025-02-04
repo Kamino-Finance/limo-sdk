@@ -53,7 +53,7 @@ export function initializeVault(
   let vault = getTokenVaultPDA(programId, globalConfig, mint);
   let pdaAuthority = getPdaAuthority(programId, globalConfig);
   let accounts: Instructions.InitializeVaultAccounts = {
-    adminAuthority: owner,
+    payer: owner,
     globalConfig,
     pdaAuthority,
     mint,
