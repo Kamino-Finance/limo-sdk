@@ -1925,11 +1925,10 @@ export class LimoClient {
   getCloseAndClaimTipsForFilledOrdersTxsIxs(
     maker: PublicKey,
     orders: OrderDisplay[],
+    batchSize: number = MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX,
   ): TransactionInstruction[][] {
     let ixsArrays: TransactionInstruction[][] = [];
     ixsArrays.push([]);
-
-    const batchSize = MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX;
 
     for (const order of orders) {
       if (order.state.status === 1) {
@@ -1939,16 +1938,14 @@ export class LimoClient {
           address: order.address,
         };
 
-        ixsArrays[ixsArrays.length - 1].push(
-          ...this.closeOrderAndClaimTipIx(maker, orderStateAndAddress),
-        );
-
-        console.log("", ixsArrays[ixsArrays.length - 1].length);
+        const ixs = this.closeOrderAndClaimTipIx(maker, orderStateAndAddress);
 
         // Once the batchSize of previous array is hit, create a new array
-        if (ixsArrays[ixsArrays.length - 1].length >= batchSize) {
+        if (ixsArrays[ixsArrays.length - 1].length + ixs.length > batchSize) {
           ixsArrays.push([]);
         }
+
+        ixsArrays[ixsArrays.length - 1].push(...ixs);
       }
     }
 
