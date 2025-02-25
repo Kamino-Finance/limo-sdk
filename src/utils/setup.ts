@@ -146,6 +146,7 @@ export async function createGlobalAccounts(
 export async function setGlobalAccounts(
   env: Env,
   owner: Keypair = env.admin,
+  skipInitVaults: boolean = false,
 ): Promise<GlobalAccounts> {
   const globalAccounts = await createGlobalAccounts(env, owner);
   const limoClient = globalAccounts.limoClient;
@@ -157,8 +158,10 @@ export async function setGlobalAccounts(
 
   limoClient.setGlobalConfig(globalAccounts.globalConfig.publicKey);
 
-  for (const [, token] of globalAccounts.tokens.entries()) {
-    await limoClient.initializeVault(globalAccounts.globalAdmin, token.mint);
+  if (!skipInitVaults) {
+    for (const [, token] of globalAccounts.tokens.entries()) {
+      await limoClient.initializeVault(globalAccounts.globalAdmin, token.mint);
+    }
   }
 
   return globalAccounts;

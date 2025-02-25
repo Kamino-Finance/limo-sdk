@@ -37,6 +37,7 @@ import {
   amountToLamportsBN,
   lamportsToAmountBN,
   divCeil,
+  checkIfAccountExists,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -1116,7 +1117,7 @@ export class LimoClient {
     const globalConfigState = await this.getGlobalConfigState();
 
     return limoOperations.initializeVault(
-      globalConfigState!.adminAuthority,
+      user,
       this._globalConfig,
       mint,
       this.programId,
@@ -1147,7 +1148,7 @@ export class LimoClient {
     const vault = getTokenVaultPDA(this.programId, this._globalConfig, mint);
 
     const log = "Initialize Vault: " + vault.toString();
-    return this.processTxn(user, [ix], mode, log, [user]);
+    return this.processTxn(user, [ix], mode, log, []);
   }
 
   /**
@@ -1163,7 +1164,7 @@ export class LimoClient {
    * @returns the create initialize order instruction and keypair to sign the transaction with
    * @throws error if mint decimals not found for mint
    */
-  createOrderGenericIx(
+  async createOrderGenericIx(
     user: PublicKey,
     inputMint: PublicKey,
     outputMint: PublicKey,
@@ -1173,7 +1174,24 @@ export class LimoClient {
     outputMintProgramId: PublicKey,
     globalConfigOverride?: PublicKey,
     wrapUnwrapSol: boolean = true,
-  ): [TransactionInstruction[], Keypair] {
+    withInitVault?: boolean,
+  ): Promise<[TransactionInstruction[], Keypair]> {
+    let initVault: boolean;
+    if (withInitVault === undefined) {
+      try {
+        const vaultPda = getTokenVaultPDA(
+          this.programId,
+          this._globalConfig,
+          inputMint,
+        );
+        initVault = !(await checkIfAccountExists(this._connection, vaultPda));
+      } catch (error) {
+        initVault = false;
+      }
+    } else {
+      initVault = withInitVault;
+    }
+
     const order = Keypair.generate();
     const orderParams: limoOperations.OrderParams = {
       side: "bid",
@@ -1184,6 +1202,19 @@ export class LimoClient {
     };
 
     const ixs: TransactionInstruction[] = [];
+
+    if (initVault) {
+      ixs.push(
+        limoOperations.initializeVault(
+          user,
+          this._globalConfig,
+          inputMint,
+          this.programId,
+          inputMintProgramId,
+        ),
+      );
+    }
+
     ixs.push(
       createKeypairRentExemptIxSync(
         user,
@@ -1250,7 +1281,7 @@ export class LimoClient {
     outputMintProgramId: PublicKey,
     globalConfigOverride?: PublicKey,
   ): Promise<[TransactionSignature, Keypair]> {
-    const [ixs, order] = this.createOrderGenericIx(
+    const [ixs, order] = await this.createOrderGenericIx(
       user.publicKey,
       inputMint,
       outputMint,
@@ -2069,7 +2100,7 @@ export class LimoClient {
    * @returns the create initialize order instruction and keypair to sign the transaction with
    * @throws error if mint decimals not found for mint
    */
-  updateOrderGenericIx(
+  async updateOrderGenericIx(
     order: OrderStateAndAddress,
     user: PublicKey,
     inputMint: PublicKey,
@@ -2080,10 +2111,10 @@ export class LimoClient {
     outputMintProgramId: PublicKey,
     globalConfigOverride?: PublicKey,
     wrapUnwrapSol: boolean = true,
-  ): [TransactionInstruction[], Keypair] {
+  ): Promise<[TransactionInstruction[], Keypair]> {
     let closeOrderIx = this.closeOrderAndClaimTipIx(user, order, wrapUnwrapSol);
 
-    let [createOrderIx, orderKeypair] = this.createOrderGenericIx(
+    let [createOrderIx, orderKeypair] = await this.createOrderGenericIx(
       user,
       inputMint,
       outputMint,
@@ -2125,7 +2156,7 @@ export class LimoClient {
     globalConfigOverride?: PublicKey,
     wrapUnwrapSol: boolean = true,
   ): Promise<[string, Keypair]> {
-    const [ixs, orderKp] = this.updateOrderGenericIx(
+    const [ixs, orderKp] = await this.updateOrderGenericIx(
       order,
       user.publicKey,
       inputMint,
