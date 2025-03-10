@@ -27,3 +27,5 @@ export { updateGlobalConfigAdmin } from "./updateGlobalConfigAdmin";
 export type { UpdateGlobalConfigAdminAccounts } from "./updateGlobalConfigAdmin";
 export { withdrawHostTip } from "./withdrawHostTip";
 export type { WithdrawHostTipAccounts } from "./withdrawHostTip";
+export { logUserSwapBalances } from "./logUserSwapBalances";
+export type { LogUserSwapBalancesAccounts } from "./logUserSwapBalances";

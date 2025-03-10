@@ -694,6 +694,47 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "logUserSwapBalances",
+      "accounts": [
+        {
+          "name": "maker",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "inputMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "outputMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "inputTa",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "outputTa",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "eventAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "program",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1082,6 +1123,26 @@
         },
         {
           "name": "lastUpdatedTimestamp",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "UserSwapBalances",
+      "fields": [
+        {
+          "name": "userLamports",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "inputTaBalance",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "outputTaBalance",
           "type": "u64",
           "index": false
         }

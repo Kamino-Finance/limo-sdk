@@ -38,6 +38,7 @@ import {
   lamportsToAmountBN,
   divCeil,
   checkIfAccountExists,
+  getEventAuthorityPDA,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -46,9 +47,15 @@ import { GlobalConfig } from "./rpc_client/accounts/GlobalConfig";
 import Decimal from "decimal.js";
 import { Order } from "./rpc_client/accounts/Order";
 import { UpdateGlobalConfigMode } from "./rpc_client/types";
-import { NATIVE_MINT, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  getAssociatedTokenAddressSync,
+  NATIVE_MINT,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import { createCloseAccountInstruction } from "@solana/spl-token";
 import base58 from "bs58";
+import { logUserSwapBalances } from "./rpc_client/instructions";
+import { getMockSwapInstructions } from "./utils/utils";
 
 export const limoId = new PublicKey(
   "LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF",
@@ -506,8 +513,8 @@ export class LimoClient {
     // consecutive pubkeys in the order account maker at byte 40 and input mint at byte 72
 
     const mergedMakerInputMint = Buffer.concat([
-      maker.toBuffer(),
-      inputMint.toBuffer(),
+      new Uint8Array(maker.toBuffer()),
+      new Uint8Array(inputMint.toBuffer()),
     ]);
 
     const filters: GetProgramAccountsFilter[] = [
@@ -1924,6 +1931,94 @@ export class LimoClient {
       extraSigners,
       300_000,
     );
+
+    return sig;
+  }
+
+  /**
+   * Get the create close order instruction
+   * @param user - the user address
+   * @param inputMont - the inputMint for the swap
+   * @param outputMint - the outputMint for the swap
+   * @param inputMintProgramId - the input mint program id
+   * @param outputMintProgramId - the output mint program id
+   * @returns the log ixs - to be used once at the beginning and once at the end
+   */
+  logUserSwapBalancesIxs(
+    user: PublicKey,
+    inputMint: PublicKey,
+    outputMint: PublicKey,
+    inputMintProgramId: PublicKey,
+    outputMintProgramId: PublicKey,
+  ): {
+    beforeSwapIx: TransactionInstruction;
+    afterSwapIx: TransactionInstruction;
+  } {
+    const inputMintAta = getAssociatedTokenAddressSync(
+      inputMint,
+      user,
+      true,
+      inputMintProgramId,
+    );
+    const outputMintAta = getAssociatedTokenAddressSync(
+      outputMint,
+      user,
+      true,
+      outputMintProgramId,
+    );
+    const logIx = logUserSwapBalances({
+      maker: user,
+      inputMint,
+      outputMint,
+      inputTa: inputMintAta,
+      outputTa: outputMintAta,
+      eventAuthority: getEventAuthorityPDA(this.programId),
+      program: this.programId,
+    });
+
+    return {
+      beforeSwapIx: logIx,
+      afterSwapIx: logIx,
+    };
+  }
+
+  /**
+   * Get the create close order instruction
+   * @param user - the user address
+   * @param inputMont - the inputMint for the swap
+   * @param outputMint - the outputMint for the swap
+   * @param inputMintProgramId - the input mint program id
+   * @param outputMintProgramId - the output mint program id
+   * @returns the log ixs - to be used once at the beginning and once at the end
+   */
+  async logUserSwapBalances(
+    user: Keypair,
+    inputMint: PublicKey,
+    outputMint: PublicKey,
+    inputMintProgramId: PublicKey,
+    outputMintProgramId: PublicKey,
+    setupIxs: TransactionInstruction[] = [],
+    mockSwapIxs: TransactionInstruction[] = [],
+    mockSwapSigners: Keypair[] = [],
+  ): Promise<TransactionSignature> {
+    const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs(
+      user.publicKey,
+      inputMint,
+      outputMint,
+      inputMintProgramId,
+      outputMintProgramId,
+    );
+
+    const sig = await this.processTxn(
+      user,
+      [...setupIxs, beforeSwapIx, ...mockSwapIxs, afterSwapIx],
+      "execute",
+      "",
+      mockSwapSigners,
+      300_000,
+    );
+
+    console.log("logUserSwapBalances", sig);
 
     return sig;
   }

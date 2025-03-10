@@ -87,7 +87,7 @@ export function getLimoProgramId(cluster: string) {
 
 export function parseKeypairFile(file: string): Keypair {
   return Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(require("fs").readFileSync(file))),
+    new Uint8Array(JSON.parse(require("fs").readFileSync(file))),
   );
 }
 
