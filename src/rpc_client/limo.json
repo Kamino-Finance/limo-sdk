@@ -715,13 +715,22 @@
         },
         {
           "name": "inputTa",
-          "isMut": true,
+          "isMut": false,
           "isSigner": false
         },
         {
           "name": "outputTa",
-          "isMut": true,
+          "isMut": false,
           "isSigner": false
+        },
+        {
+          "name": "pdaReferrer",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "if it's not the pda it doesn't matter"
+          ]
         },
         {
           "name": "eventAuthority",
@@ -1349,6 +1358,31 @@
       "code": 6039,
       "name": "OrderTypeInvalid",
       "msg": "The order type is invalid"
+    },
+    {
+      "code": 6040,
+      "name": "UninitializedTokenAccount",
+      "msg": "Token account is not initialized"
+    },
+    {
+      "code": 6041,
+      "name": "InvalidTokenAccountOwner",
+      "msg": "Account is not owned by the token program"
+    },
+    {
+      "code": 6042,
+      "name": "InvalidAccount",
+      "msg": "Account is not a valid token account"
+    },
+    {
+      "code": 6043,
+      "name": "InvalidTokenMint",
+      "msg": "Token account has incorrect mint"
+    },
+    {
+      "code": 6044,
+      "name": "InvalidTokenAuthority",
+      "msg": "Token account has incorrect authority"
     }
   ]
 }

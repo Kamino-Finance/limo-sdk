@@ -38,7 +38,12 @@ export type CustomError =
   | OrderSameMint
   | UnsupportedTokenExtension
   | InvalidTokenAccount
-  | OrderTypeInvalid;
+  | OrderTypeInvalid
+  | UninitializedTokenAccount
+  | InvalidTokenAccountOwner
+  | InvalidAccount
+  | InvalidTokenMint
+  | InvalidTokenAuthority;
 
 export class OrderCanNotBeCanceled extends Error {
   static readonly code = 6000;
@@ -495,6 +500,61 @@ export class OrderTypeInvalid extends Error {
   }
 }
 
+export class UninitializedTokenAccount extends Error {
+  static readonly code = 6040;
+  readonly code = 6040;
+  readonly name = "UninitializedTokenAccount";
+  readonly msg = "Token account is not initialized";
+
+  constructor(readonly logs?: string[]) {
+    super("6040: Token account is not initialized");
+  }
+}
+
+export class InvalidTokenAccountOwner extends Error {
+  static readonly code = 6041;
+  readonly code = 6041;
+  readonly name = "InvalidTokenAccountOwner";
+  readonly msg = "Account is not owned by the token program";
+
+  constructor(readonly logs?: string[]) {
+    super("6041: Account is not owned by the token program");
+  }
+}
+
+export class InvalidAccount extends Error {
+  static readonly code = 6042;
+  readonly code = 6042;
+  readonly name = "InvalidAccount";
+  readonly msg = "Account is not a valid token account";
+
+  constructor(readonly logs?: string[]) {
+    super("6042: Account is not a valid token account");
+  }
+}
+
+export class InvalidTokenMint extends Error {
+  static readonly code = 6043;
+  readonly code = 6043;
+  readonly name = "InvalidTokenMint";
+  readonly msg = "Token account has incorrect mint";
+
+  constructor(readonly logs?: string[]) {
+    super("6043: Token account has incorrect mint");
+  }
+}
+
+export class InvalidTokenAuthority extends Error {
+  static readonly code = 6044;
+  readonly code = 6044;
+  readonly name = "InvalidTokenAuthority";
+  readonly msg = "Token account has incorrect authority";
+
+  constructor(readonly logs?: string[]) {
+    super("6044: Token account has incorrect authority");
+  }
+}
+
 export function fromCode(code: number, logs?: string[]): CustomError | null {
   switch (code) {
     case 6000:
@@ -577,6 +637,16 @@ export function fromCode(code: number, logs?: string[]): CustomError | null {
       return new InvalidTokenAccount(logs);
     case 6039:
       return new OrderTypeInvalid(logs);
+    case 6040:
+      return new UninitializedTokenAccount(logs);
+    case 6041:
+      return new InvalidTokenAccountOwner(logs);
+    case 6042:
+      return new InvalidAccount(logs);
+    case 6043:
+      return new InvalidTokenMint(logs);
+    case 6044:
+      return new InvalidTokenAuthority(logs);
   }
 
   return null;

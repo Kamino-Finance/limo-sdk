@@ -1950,6 +1950,7 @@ export class LimoClient {
     outputMint: PublicKey,
     inputMintProgramId: PublicKey,
     outputMintProgramId: PublicKey,
+    pdaReferrer: PublicKey = this.programId,
   ): {
     beforeSwapIx: TransactionInstruction;
     afterSwapIx: TransactionInstruction;
@@ -1974,6 +1975,7 @@ export class LimoClient {
       outputTa: outputMintAta,
       eventAuthority: getEventAuthorityPDA(this.programId),
       program: this.programId,
+      pdaReferrer,
     });
 
     return {

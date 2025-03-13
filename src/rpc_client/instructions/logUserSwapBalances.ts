@@ -14,6 +14,8 @@ export interface LogUserSwapBalancesAccounts {
   outputMint: PublicKey;
   inputTa: PublicKey;
   outputTa: PublicKey;
+  /** if it's not the pda it doesn't matter */
+  pdaReferrer: PublicKey;
   eventAuthority: PublicKey;
   program: PublicKey;
 }
@@ -26,8 +28,9 @@ export function logUserSwapBalances(
     { pubkey: accounts.maker, isSigner: true, isWritable: false },
     { pubkey: accounts.inputMint, isSigner: false, isWritable: false },
     { pubkey: accounts.outputMint, isSigner: false, isWritable: false },
-    { pubkey: accounts.inputTa, isSigner: false, isWritable: true },
-    { pubkey: accounts.outputTa, isSigner: false, isWritable: true },
+    { pubkey: accounts.inputTa, isSigner: false, isWritable: false },
+    { pubkey: accounts.outputTa, isSigner: false, isWritable: false },
+    { pubkey: accounts.pdaReferrer, isSigner: false, isWritable: false },
     { pubkey: accounts.eventAuthority, isSigner: false, isWritable: false },
     { pubkey: accounts.program, isSigner: false, isWritable: false },
   ];
