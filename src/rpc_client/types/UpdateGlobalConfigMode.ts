@@ -187,6 +187,52 @@ export class UpdateOrderCloseDelaySeconds {
   }
 }
 
+export interface UpdateTxnFeeCostJSON {
+  kind: "UpdateTxnFeeCost";
+}
+
+export class UpdateTxnFeeCost {
+  static readonly discriminator = 8;
+  static readonly kind = "UpdateTxnFeeCost";
+  readonly discriminator = 8;
+  readonly kind = "UpdateTxnFeeCost";
+
+  toJSON(): UpdateTxnFeeCostJSON {
+    return {
+      kind: "UpdateTxnFeeCost",
+    };
+  }
+
+  toEncodable() {
+    return {
+      UpdateTxnFeeCost: {},
+    };
+  }
+}
+
+export interface UpdateAtaCreationCostJSON {
+  kind: "UpdateAtaCreationCost";
+}
+
+export class UpdateAtaCreationCost {
+  static readonly discriminator = 9;
+  static readonly kind = "UpdateAtaCreationCost";
+  readonly discriminator = 9;
+  readonly kind = "UpdateAtaCreationCost";
+
+  toJSON(): UpdateAtaCreationCostJSON {
+    return {
+      kind: "UpdateAtaCreationCost",
+    };
+  }
+
+  toEncodable() {
+    return {
+      UpdateAtaCreationCost: {},
+    };
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fromDecoded(obj: any): types.UpdateGlobalConfigModeKind {
   if (typeof obj !== "object") {
@@ -216,6 +262,12 @@ export function fromDecoded(obj: any): types.UpdateGlobalConfigModeKind {
   }
   if ("UpdateOrderCloseDelaySeconds" in obj) {
     return new UpdateOrderCloseDelaySeconds();
+  }
+  if ("UpdateTxnFeeCost" in obj) {
+    return new UpdateTxnFeeCost();
+  }
+  if ("UpdateAtaCreationCost" in obj) {
+    return new UpdateAtaCreationCost();
   }
 
   throw new Error("Invalid enum object");
@@ -249,6 +301,12 @@ export function fromJSON(
     case "UpdateOrderCloseDelaySeconds": {
       return new UpdateOrderCloseDelaySeconds();
     }
+    case "UpdateTxnFeeCost": {
+      return new UpdateTxnFeeCost();
+    }
+    case "UpdateAtaCreationCost": {
+      return new UpdateAtaCreationCost();
+    }
   }
 }
 
@@ -262,6 +320,8 @@ export function layout(property?: string) {
     borsh.struct([], "UpdateAdminAuthorityCached"),
     borsh.struct([], "UpdateOrderTakingPermissionless"),
     borsh.struct([], "UpdateOrderCloseDelaySeconds"),
+    borsh.struct([], "UpdateTxnFeeCost"),
+    borsh.struct([], "UpdateAtaCreationCost"),
   ]);
   if (property !== undefined) {
     return ret.replicate(property);

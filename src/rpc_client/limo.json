@@ -74,7 +74,7 @@
         },
         {
           "name": "globalConfig",
-          "isMut": false,
+          "isMut": true,
           "isSigner": false
         },
         {
@@ -114,6 +114,11 @@
         },
         {
           "name": "outputTokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
           "isMut": false,
           "isSigner": false
         },
@@ -970,11 +975,19 @@
             "type": "publicKey"
           },
           {
+            "name": "txnFeeCost",
+            "type": "u64"
+          },
+          {
+            "name": "ataCreationCost",
+            "type": "u64"
+          },
+          {
             "name": "padding2",
             "type": {
               "array": [
                 "u64",
-                243
+                241
               ]
             }
           }
@@ -1039,6 +1052,12 @@
           },
           {
             "name": "UpdateOrderCloseDelaySeconds"
+          },
+          {
+            "name": "UpdateTxnFeeCost"
+          },
+          {
+            "name": "UpdateAtaCreationCost"
           }
         ]
       }

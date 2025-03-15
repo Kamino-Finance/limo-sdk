@@ -25,6 +25,7 @@ export interface CreateOrderAccounts {
   inputVault: PublicKey;
   inputTokenProgram: PublicKey;
   outputTokenProgram: PublicKey;
+  systemProgram: PublicKey;
   eventAuthority: PublicKey;
   program: PublicKey;
 }
@@ -42,7 +43,7 @@ export function createOrder(
 ) {
   const keys: Array<AccountMeta> = [
     { pubkey: accounts.maker, isSigner: true, isWritable: true },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: false },
+    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
     { pubkey: accounts.pdaAuthority, isSigner: false, isWritable: false },
     { pubkey: accounts.order, isSigner: false, isWritable: true },
     { pubkey: accounts.inputMint, isSigner: false, isWritable: false },
@@ -51,6 +52,7 @@ export function createOrder(
     { pubkey: accounts.inputVault, isSigner: false, isWritable: true },
     { pubkey: accounts.inputTokenProgram, isSigner: false, isWritable: false },
     { pubkey: accounts.outputTokenProgram, isSigner: false, isWritable: false },
+    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
     { pubkey: accounts.eventAuthority, isSigner: false, isWritable: false },
     { pubkey: accounts.program, isSigner: false, isWritable: false },
   ];

@@ -124,6 +124,7 @@ export function createOrder(
         : baseTokenMintProgramId,
     eventAuthority: getEventAuthorityPDA(programId),
     program: programId,
+    systemProgram: SystemProgram.programId,
   };
 
   let args: Instructions.CreateOrderArgs = {

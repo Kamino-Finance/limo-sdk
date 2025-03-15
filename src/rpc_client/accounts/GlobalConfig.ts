@@ -35,6 +35,8 @@ export interface GlobalConfigFields {
   pdaAuthorityBump: BN;
   adminAuthority: PublicKey;
   adminAuthorityCached: PublicKey;
+  txnFeeCost: BN;
+  ataCreationCost: BN;
   padding2: Array<BN>;
 }
 
@@ -69,6 +71,8 @@ export interface GlobalConfigJSON {
   pdaAuthorityBump: string;
   adminAuthority: string;
   adminAuthorityCached: string;
+  txnFeeCost: string;
+  ataCreationCost: string;
   padding2: Array<string>;
 }
 
@@ -103,6 +107,8 @@ export class GlobalConfig {
   readonly pdaAuthorityBump: BN;
   readonly adminAuthority: PublicKey;
   readonly adminAuthorityCached: PublicKey;
+  readonly txnFeeCost: BN;
+  readonly ataCreationCost: BN;
   readonly padding2: Array<BN>;
 
   static readonly discriminator = Buffer.from([
@@ -126,7 +132,9 @@ export class GlobalConfig {
     borsh.u64("pdaAuthorityBump"),
     borsh.publicKey("adminAuthority"),
     borsh.publicKey("adminAuthorityCached"),
-    borsh.array(borsh.u64(), 243, "padding2"),
+    borsh.u64("txnFeeCost"),
+    borsh.u64("ataCreationCost"),
+    borsh.array(borsh.u64(), 241, "padding2"),
   ]);
 
   constructor(fields: GlobalConfigFields) {
@@ -147,6 +155,8 @@ export class GlobalConfig {
     this.pdaAuthorityBump = fields.pdaAuthorityBump;
     this.adminAuthority = fields.adminAuthority;
     this.adminAuthorityCached = fields.adminAuthorityCached;
+    this.txnFeeCost = fields.txnFeeCost;
+    this.ataCreationCost = fields.ataCreationCost;
     this.padding2 = fields.padding2;
   }
 
@@ -211,6 +221,8 @@ export class GlobalConfig {
       pdaAuthorityBump: dec.pdaAuthorityBump,
       adminAuthority: dec.adminAuthority,
       adminAuthorityCached: dec.adminAuthorityCached,
+      txnFeeCost: dec.txnFeeCost,
+      ataCreationCost: dec.ataCreationCost,
       padding2: dec.padding2,
     });
   }
@@ -234,6 +246,8 @@ export class GlobalConfig {
       pdaAuthorityBump: this.pdaAuthorityBump.toString(),
       adminAuthority: this.adminAuthority.toString(),
       adminAuthorityCached: this.adminAuthorityCached.toString(),
+      txnFeeCost: this.txnFeeCost.toString(),
+      ataCreationCost: this.ataCreationCost.toString(),
       padding2: this.padding2.map((item) => item.toString()),
     };
   }
@@ -258,6 +272,8 @@ export class GlobalConfig {
       pdaAuthorityBump: new BN(obj.pdaAuthorityBump),
       adminAuthority: new PublicKey(obj.adminAuthority),
       adminAuthorityCached: new PublicKey(obj.adminAuthorityCached),
+      txnFeeCost: new BN(obj.txnFeeCost),
+      ataCreationCost: new BN(obj.ataCreationCost),
       padding2: obj.padding2.map((item) => new BN(item)),
     });
   }

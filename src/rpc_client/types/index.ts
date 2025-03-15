@@ -29,7 +29,9 @@ export type UpdateGlobalConfigModeKind =
   | UpdateGlobalConfigMode.UpdateHostFeeBps
   | UpdateGlobalConfigMode.UpdateAdminAuthorityCached
   | UpdateGlobalConfigMode.UpdateOrderTakingPermissionless
-  | UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds;
+  | UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds
+  | UpdateGlobalConfigMode.UpdateTxnFeeCost
+  | UpdateGlobalConfigMode.UpdateAtaCreationCost;
 export type UpdateGlobalConfigModeJSON =
   | UpdateGlobalConfigMode.UpdateEmergencyModeJSON
   | UpdateGlobalConfigMode.UpdateFlashTakeOrderBlockedJSON
@@ -38,7 +40,9 @@ export type UpdateGlobalConfigModeJSON =
   | UpdateGlobalConfigMode.UpdateHostFeeBpsJSON
   | UpdateGlobalConfigMode.UpdateAdminAuthorityCachedJSON
   | UpdateGlobalConfigMode.UpdateOrderTakingPermissionlessJSON
-  | UpdateGlobalConfigMode.UpdateOrderCloseDelaySecondsJSON;
+  | UpdateGlobalConfigMode.UpdateOrderCloseDelaySecondsJSON
+  | UpdateGlobalConfigMode.UpdateTxnFeeCostJSON
+  | UpdateGlobalConfigMode.UpdateAtaCreationCostJSON;
 
 export { UpdateGlobalConfigValue };
 
