@@ -701,41 +701,61 @@
       "args": []
     },
     {
-      "name": "logUserSwapBalances",
+      "name": "logUserSwapBalancesStart",
       "accounts": [
         {
-          "name": "maker",
-          "isMut": false,
-          "isSigner": true
-        },
-        {
-          "name": "inputMint",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "outputMint",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "inputTa",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "outputTa",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "pdaReferrer",
-          "isMut": false,
-          "isSigner": false,
-          "isOptional": true,
-          "docs": [
-            "if it's not the pda it doesn't matter"
+          "name": "baseAccounts",
+          "accounts": [
+            {
+              "name": "maker",
+              "isMut": false,
+              "isSigner": true
+            },
+            {
+              "name": "inputMint",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "outputMint",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "inputTa",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "outputTa",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "pdaReferrer",
+              "isMut": false,
+              "isSigner": false,
+              "isOptional": true,
+              "docs": [
+                "if it's not the pda it doesn't matter"
+              ]
+            }
           ]
+        },
+        {
+          "name": "userSwapBalanceState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
         },
         {
           "name": "eventAuthority",
@@ -748,7 +768,87 @@
           "isSigner": false
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "swapProgramId",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "logUserSwapBalancesEnd",
+      "accounts": [
+        {
+          "name": "baseAccounts",
+          "accounts": [
+            {
+              "name": "maker",
+              "isMut": false,
+              "isSigner": true
+            },
+            {
+              "name": "inputMint",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "outputMint",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "inputTa",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "outputTa",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "pdaReferrer",
+              "isMut": false,
+              "isSigner": false,
+              "isOptional": true,
+              "docs": [
+                "if it's not the pda it doesn't matter"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "userSwapBalanceState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "eventAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "program",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "swapProgramId",
+          "type": "publicKey"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -875,6 +975,26 @@
                 19
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserSwapBalancesState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "userLamports",
+            "type": "u64"
+          },
+          {
+            "name": "inputTaBalance",
+            "type": "u64"
+          },
+          {
+            "name": "outputTaBalance",
+            "type": "u64"
           }
         ]
       }
@@ -1157,21 +1277,41 @@
       ]
     },
     {
-      "name": "UserSwapBalances",
+      "name": "UserSwapBalanceDiffs",
       "fields": [
         {
-          "name": "userLamports",
+          "name": "userLamportsBefore",
           "type": "u64",
           "index": false
         },
         {
-          "name": "inputTaBalance",
+          "name": "inputTaBalanceBefore",
           "type": "u64",
           "index": false
         },
         {
-          "name": "outputTaBalance",
+          "name": "outputTaBalanceBefore",
           "type": "u64",
+          "index": false
+        },
+        {
+          "name": "userLamportsAfter",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "inputTaBalanceAfter",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "outputTaBalanceAfter",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "swapProgram",
+          "type": "publicKey",
           "index": false
         }
       ]

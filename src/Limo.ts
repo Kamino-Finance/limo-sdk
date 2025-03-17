@@ -11,6 +11,7 @@ import {
   sendAndConfirmTransaction,
   Signer,
   SystemProgram,
+  SYSVAR_RENT_PUBKEY,
   Transaction,
   TransactionInstruction,
   TransactionSignature,
@@ -39,6 +40,7 @@ import {
   divCeil,
   checkIfAccountExists,
   getEventAuthorityPDA,
+  getUserSwapBalanceStatePDA,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -54,8 +56,8 @@ import {
 } from "@solana/spl-token";
 import { createCloseAccountInstruction } from "@solana/spl-token";
 import base58 from "bs58";
-import { logUserSwapBalances } from "./rpc_client/instructions";
-import { getMockSwapInstructions } from "./utils/utils";
+import { logUserSwapBalancesStart } from "./rpc_client/instructions";
+import { logUserSwapBalancesEnd } from "./rpc_client/instructions";
 
 export const limoId = new PublicKey(
   "LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF",
@@ -1950,6 +1952,7 @@ export class LimoClient {
     outputMint: PublicKey,
     inputMintProgramId: PublicKey,
     outputMintProgramId: PublicKey,
+    swapProgarmId: PublicKey = this.programId,
     pdaReferrer: PublicKey = this.programId,
   ): {
     beforeSwapIx: TransactionInstruction;
@@ -1967,20 +1970,52 @@ export class LimoClient {
       true,
       outputMintProgramId,
     );
-    const logIx = logUserSwapBalances({
-      maker: user,
-      inputMint,
-      outputMint,
-      inputTa: inputMintAta,
-      outputTa: outputMintAta,
-      eventAuthority: getEventAuthorityPDA(this.programId),
-      program: this.programId,
-      pdaReferrer,
-    });
+
+    const logIxStart = logUserSwapBalancesStart(
+      {
+        swapProgramId: swapProgarmId,
+      },
+      {
+        baseAccounts: {
+          maker: user,
+          inputMint,
+          outputMint,
+          inputTa: inputMintAta,
+          outputTa: outputMintAta,
+          pdaReferrer,
+        },
+        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
+        eventAuthority: getEventAuthorityPDA(this.programId),
+        program: this.programId,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      },
+    );
+
+    const logIxEnd = logUserSwapBalancesEnd(
+      {
+        swapProgramId: swapProgarmId,
+      },
+      {
+        baseAccounts: {
+          maker: user,
+          inputMint,
+          outputMint,
+          inputTa: inputMintAta,
+          outputTa: outputMintAta,
+          pdaReferrer,
+        },
+        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
+        eventAuthority: getEventAuthorityPDA(this.programId),
+        program: this.programId,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      },
+    );
 
     return {
-      beforeSwapIx: logIx,
-      afterSwapIx: logIx,
+      beforeSwapIx: logIxStart,
+      afterSwapIx: logIxEnd,
     };
   }
 

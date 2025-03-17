@@ -697,6 +697,19 @@ export function getEventAuthorityPDA(programId: PublicKey): PublicKey {
   return eventAuthority;
 }
 
+export function getUserSwapBalanceStatePDA(
+  maker: PublicKey,
+  programId: PublicKey,
+): PublicKey {
+  const [swapBalanceState, _swapBalanceStateBump] =
+    anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("balances"), maker.toBuffer()],
+      programId,
+    );
+
+  return swapBalanceState;
+}
+
 export function getIntermediaryTokenAccountPDA(
   programId: PublicKey,
   order: PublicKey,
