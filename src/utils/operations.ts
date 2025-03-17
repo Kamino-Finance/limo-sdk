@@ -446,6 +446,9 @@ function encodedUpdateGlobalConfigValue(
       valueData.writeUInt16LE(valueNumber, 0);
       break;
     case UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds.discriminator:
+    case UpdateGlobalConfigMode.UpdateAtaCreationCost.discriminator:
+    case UpdateGlobalConfigMode.UpdateTxnFeeCost.discriminator:
+    case UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds.discriminator:
       valueNumber = value as number;
       valueData.writeBigUInt64LE(BigInt(value.toString()), 0);
       break;

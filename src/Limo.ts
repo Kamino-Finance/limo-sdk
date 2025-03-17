@@ -2339,6 +2339,8 @@ export class LimoClient {
       " and value " +
       value.toString();
 
+    console.log("updateGlobalConfig", log);
+
     const sig = await this.processTxn(admin, ixs, mode, log, []);
 
     return sig;
@@ -2562,6 +2564,7 @@ export class LimoClient {
     priorityFeeLamports: number = 10000,
   ): Promise<TransactionSignature> {
     if (mode === "multisig" || mode === "simulate") {
+      console.log("asdsa");
       const { blockhash } = await this._connection.getLatestBlockhash();
       const txn = new Transaction();
       txn.add(...ixs);
@@ -2598,6 +2601,9 @@ export class LimoClient {
 
       return sig;
     }
+
+    console.log(debugMessage);
+
     return "";
   }
 

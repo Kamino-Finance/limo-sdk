@@ -30,6 +30,8 @@ export async function updateGlobalConfig(
     case UpdateGlobalConfigMode.UpdateHostFeeBps.discriminator:
     case UpdateGlobalConfigMode.UpdateOrderTakingPermissionless.discriminator:
     case UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds.discriminator:
+    case UpdateGlobalConfigMode.UpdateTxnFeeCost.discriminator:
+    case UpdateGlobalConfigMode.UpdateAtaCreationCost.discriminator:
       valueCasted = Number(value);
       break;
     case UpdateGlobalConfigMode.UpdateAdminAuthorityCached.discriminator:
