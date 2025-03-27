@@ -8,7 +8,7 @@
     "dist",
     "src/**/*.ts"
   ],
-  "version": "0.7.5",
+  "version": "1.0.9",
   "scripts": {
     "build": "tsc",
     "build:test": "tsc --project ./tests/tsconfig.json",
