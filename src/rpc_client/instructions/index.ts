@@ -28,12 +28,6 @@ export type { UpdateGlobalConfigAdminAccounts } from "./updateGlobalConfigAdmin"
 export { withdrawHostTip } from "./withdrawHostTip";
 export type { WithdrawHostTipAccounts } from "./withdrawHostTip";
 export { logUserSwapBalancesStart } from "./logUserSwapBalancesStart";
-export type {
-  LogUserSwapBalancesStartArgs,
-  LogUserSwapBalancesStartAccounts,
-} from "./logUserSwapBalancesStart";
+export type { LogUserSwapBalancesStartAccounts } from "./logUserSwapBalancesStart";
 export { logUserSwapBalancesEnd } from "./logUserSwapBalancesEnd";
-export type {
-  LogUserSwapBalancesEndArgs,
-  LogUserSwapBalancesEndAccounts,
-} from "./logUserSwapBalancesEnd";
+export type { LogUserSwapBalancesEndAccounts } from "./logUserSwapBalancesEnd";

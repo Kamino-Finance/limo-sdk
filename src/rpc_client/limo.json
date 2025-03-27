@@ -739,6 +739,11 @@
               "docs": [
                 "if it's not the pda it doesn't matter"
               ]
+            },
+            {
+              "name": "swapProgramId",
+              "isMut": false,
+              "isSigner": false
             }
           ]
         },
@@ -758,6 +763,11 @@
           "isSigner": false
         },
         {
+          "name": "sysvarInstructions",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "eventAuthority",
           "isMut": false,
           "isSigner": false
@@ -768,12 +778,7 @@
           "isSigner": false
         }
       ],
-      "args": [
-        {
-          "name": "swapProgramId",
-          "type": "publicKey"
-        }
-      ]
+      "args": []
     },
     {
       "name": "logUserSwapBalancesEnd",
@@ -814,6 +819,11 @@
               "docs": [
                 "if it's not the pda it doesn't matter"
               ]
+            },
+            {
+              "name": "swapProgramId",
+              "isMut": false,
+              "isSigner": false
             }
           ]
         },
@@ -833,6 +843,11 @@
           "isSigner": false
         },
         {
+          "name": "sysvarInstructions",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
           "name": "eventAuthority",
           "isMut": false,
           "isSigner": false
@@ -843,12 +858,7 @@
           "isSigner": false
         }
       ],
-      "args": [
-        {
-          "name": "swapProgramId",
-          "type": "publicKey"
-        }
-      ]
+      "args": []
     }
   ],
   "accounts": [

@@ -470,6 +470,22 @@ export function getMockSwapInstructions(
   return [...burnIx, ...mintToIx];
 }
 
+export function getMockSwapSingleInstructionSplOnly(
+  provider: anchor.AnchorProvider,
+  user: PublicKey,
+  swapOutputMint: PublicKey,
+  swapOutAmountDecimal: Decimal,
+  outTokenDecimals: number,
+): anchor.web3.TransactionInstruction {
+  return createMintToCheckedInstruction(
+    swapOutputMint, // mint
+    getAssociatedTokenAddress(user, swapOutputMint, TOKEN_PROGRAM_ID),
+    provider.wallet.publicKey, // mint authority
+    amountToLamportsDecimal(swapOutAmountDecimal, outTokenDecimals).toNumber(),
+    outTokenDecimals,
+  );
+}
+
 export async function transferToken(
   provider: anchor.AnchorProvider,
   fromAccount: Signer,

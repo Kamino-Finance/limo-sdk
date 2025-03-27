@@ -58,6 +58,7 @@ import { createCloseAccountInstruction } from "@solana/spl-token";
 import base58 from "bs58";
 import { logUserSwapBalancesStart } from "./rpc_client/instructions";
 import { logUserSwapBalancesEnd } from "./rpc_client/instructions";
+import * as anchor from "@coral-xyz/anchor";
 
 export const limoId = new PublicKey(
   "LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF",
@@ -1952,7 +1953,7 @@ export class LimoClient {
     outputMint: PublicKey,
     inputMintProgramId: PublicKey,
     outputMintProgramId: PublicKey,
-    swapProgarmId: PublicKey = this.programId,
+    swapProgarmId: PublicKey,
     pdaReferrer: PublicKey = this.programId,
   ): {
     beforeSwapIx: TransactionInstruction;
@@ -1971,47 +1972,41 @@ export class LimoClient {
       outputMintProgramId,
     );
 
-    const logIxStart = logUserSwapBalancesStart(
-      {
+    const logIxStart = logUserSwapBalancesStart({
+      baseAccounts: {
+        maker: user,
+        inputMint,
+        outputMint,
+        inputTa: inputMintAta,
+        outputTa: outputMintAta,
+        pdaReferrer,
         swapProgramId: swapProgarmId,
       },
-      {
-        baseAccounts: {
-          maker: user,
-          inputMint,
-          outputMint,
-          inputTa: inputMintAta,
-          outputTa: outputMintAta,
-          pdaReferrer,
-        },
-        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
-        eventAuthority: getEventAuthorityPDA(this.programId),
-        program: this.programId,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-      },
-    );
+      userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
+      eventAuthority: getEventAuthorityPDA(this.programId),
+      program: this.programId,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    });
 
-    const logIxEnd = logUserSwapBalancesEnd(
-      {
+    const logIxEnd = logUserSwapBalancesEnd({
+      baseAccounts: {
+        maker: user,
+        inputMint,
+        outputMint,
+        inputTa: inputMintAta,
+        outputTa: outputMintAta,
+        pdaReferrer,
         swapProgramId: swapProgarmId,
       },
-      {
-        baseAccounts: {
-          maker: user,
-          inputMint,
-          outputMint,
-          inputTa: inputMintAta,
-          outputTa: outputMintAta,
-          pdaReferrer,
-        },
-        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
-        eventAuthority: getEventAuthorityPDA(this.programId),
-        program: this.programId,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-      },
-    );
+      userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
+      eventAuthority: getEventAuthorityPDA(this.programId),
+      program: this.programId,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    });
 
     return {
       beforeSwapIx: logIxStart,
@@ -2037,6 +2032,7 @@ export class LimoClient {
     setupIxs: TransactionInstruction[] = [],
     mockSwapIxs: TransactionInstruction[] = [],
     mockSwapSigners: Keypair[] = [],
+    swapProgarmId: PublicKey,
   ): Promise<TransactionSignature> {
     const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs(
       user.publicKey,
@@ -2044,6 +2040,7 @@ export class LimoClient {
       outputMint,
       inputMintProgramId,
       outputMintProgramId,
+      swapProgarmId,
     );
 
     const sig = await this.processTxn(
