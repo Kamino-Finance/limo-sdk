@@ -1955,6 +1955,7 @@ export class LimoClient {
     outputMintProgramId: PublicKey,
     swapProgarmId: PublicKey,
     pdaReferrer: PublicKey = this.programId,
+    voteAccount?: PublicKey,
   ): {
     beforeSwapIx: TransactionInstruction;
     afterSwapIx: TransactionInstruction;
@@ -2008,6 +2009,16 @@ export class LimoClient {
       sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
     });
 
+    if (voteAccount) {
+      const voteAccountMetadata = {
+        pubkey: voteAccount,
+        isSigner: false,
+        isWritable: false,
+      };
+      logIxStart.keys.push(voteAccountMetadata);
+      logIxEnd.keys.push(voteAccountMetadata);
+    }
+
     return {
       beforeSwapIx: logIxStart,
       afterSwapIx: logIxEnd,
@@ -2033,6 +2044,7 @@ export class LimoClient {
     mockSwapIxs: TransactionInstruction[] = [],
     mockSwapSigners: Keypair[] = [],
     swapProgarmId: PublicKey,
+    voteAccount?: PublicKey,
   ): Promise<TransactionSignature> {
     const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs(
       user.publicKey,
@@ -2041,6 +2053,7 @@ export class LimoClient {
       inputMintProgramId,
       outputMintProgramId,
       swapProgarmId,
+      voteAccount,
     );
 
     const sig = await this.processTxn(
