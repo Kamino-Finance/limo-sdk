@@ -8,6 +8,15 @@ import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-es
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
+export interface LogUserSwapBalancesEndArgs {
+  simulatedSwapAmountOut: BN;
+  simulatedTs: BN;
+  minimumAmountOut: BN;
+  swapAmountIn: BN;
+  simulatedAmountOutNextBest: BN;
+  nextBestAggregator: Array<number>;
+}
+
 export interface LogUserSwapBalancesEndAccounts {
   baseAccounts: {
     maker: PublicKey;
@@ -27,7 +36,17 @@ export interface LogUserSwapBalancesEndAccounts {
   program: PublicKey;
 }
 
+export const layout = borsh.struct([
+  borsh.u64("simulatedSwapAmountOut"),
+  borsh.u64("simulatedTs"),
+  borsh.u64("minimumAmountOut"),
+  borsh.u64("swapAmountIn"),
+  borsh.u64("simulatedAmountOutNextBest"),
+  borsh.array(borsh.u8(), 4, "nextBestAggregator"),
+]);
+
 export function logUserSwapBalancesEnd(
+  args: LogUserSwapBalancesEndArgs,
   accounts: LogUserSwapBalancesEndAccounts,
   programId: PublicKey = PROGRAM_ID,
 ) {
@@ -75,7 +94,19 @@ export function logUserSwapBalancesEnd(
     { pubkey: accounts.program, isSigner: false, isWritable: false },
   ];
   const identifier = Buffer.from([140, 42, 198, 82, 147, 144, 44, 113]);
-  const data = identifier;
+  const buffer = Buffer.alloc(1000);
+  const len = layout.encode(
+    {
+      simulatedSwapAmountOut: args.simulatedSwapAmountOut,
+      simulatedTs: args.simulatedTs,
+      minimumAmountOut: args.minimumAmountOut,
+      swapAmountIn: args.swapAmountIn,
+      simulatedAmountOutNextBest: args.simulatedAmountOutNextBest,
+      nextBestAggregator: args.nextBestAggregator,
+    },
+    buffer,
+  );
+  const data = Buffer.concat([identifier, buffer]).slice(0, 8 + len);
   const ix = new TransactionInstruction({ keys, programId, data });
   return ix;
 }

@@ -1954,12 +1954,21 @@ export class LimoClient {
     inputMintProgramId: PublicKey,
     outputMintProgramId: PublicKey,
     swapProgarmId: PublicKey,
+    simulatedSwapAmountOut: BN,
+    simulatedTs: BN,
+    minimumAmountOut: BN,
+    swapAmountIn: BN,
+    simulatedAmountOutNextBest: BN,
+    nextBestAggregator: string,
     pdaReferrer: PublicKey = this.programId,
     voteAccount?: PublicKey,
   ): {
     beforeSwapIx: TransactionInstruction;
     afterSwapIx: TransactionInstruction;
   } {
+    if (nextBestAggregator.length > 4) {
+      throw new Error("nextBestAggregator string must be 4 bytes");
+    }
     const inputMintAta = getAssociatedTokenAddressSync(
       inputMint,
       user,
@@ -1991,23 +2000,37 @@ export class LimoClient {
       sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
     });
 
-    const logIxEnd = logUserSwapBalancesEnd({
-      baseAccounts: {
-        maker: user,
-        inputMint,
-        outputMint,
-        inputTa: inputMintAta,
-        outputTa: outputMintAta,
-        pdaReferrer,
-        swapProgramId: swapProgarmId,
+    const nextBestAggregatorBytes = Buffer.alloc(4);
+
+    nextBestAggregatorBytes.write(nextBestAggregator, "utf-8");
+
+    const logIxEnd = logUserSwapBalancesEnd(
+      {
+        simulatedSwapAmountOut,
+        simulatedTs,
+        minimumAmountOut,
+        swapAmountIn,
+        simulatedAmountOutNextBest,
+        nextBestAggregator: Array.from(nextBestAggregatorBytes),
       },
-      userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
-      eventAuthority: getEventAuthorityPDA(this.programId),
-      program: this.programId,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-    });
+      {
+        baseAccounts: {
+          maker: user,
+          inputMint,
+          outputMint,
+          inputTa: inputMintAta,
+          outputTa: outputMintAta,
+          pdaReferrer,
+          swapProgramId: swapProgarmId,
+        },
+        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
+        eventAuthority: getEventAuthorityPDA(this.programId),
+        program: this.programId,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      },
+    );
 
     if (voteAccount) {
       const voteAccountMetadata = {
@@ -2045,6 +2068,7 @@ export class LimoClient {
     mockSwapSigners: Keypair[] = [],
     swapProgarmId: PublicKey,
     voteAccount?: PublicKey,
+    simulatedAccountString?: string,
   ): Promise<TransactionSignature> {
     const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs(
       user.publicKey,
@@ -2053,6 +2077,13 @@ export class LimoClient {
       inputMintProgramId,
       outputMintProgramId,
       swapProgarmId,
+      new BN(0),
+      new BN(0),
+      new BN(0),
+      new BN(0),
+      new BN(0),
+      simulatedAccountString ? simulatedAccountString : "none",
+      this.programId,
       voteAccount,
     );
 

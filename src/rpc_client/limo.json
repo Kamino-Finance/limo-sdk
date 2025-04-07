@@ -858,7 +858,37 @@
           "isSigner": false
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "simulatedSwapAmountOut",
+          "type": "u64"
+        },
+        {
+          "name": "simulatedTs",
+          "type": "u64"
+        },
+        {
+          "name": "minimumAmountOut",
+          "type": "u64"
+        },
+        {
+          "name": "swapAmountIn",
+          "type": "u64"
+        },
+        {
+          "name": "simulatedAmountOutNextBest",
+          "type": "u64"
+        },
+        {
+          "name": "nextBestAggregator",
+          "type": {
+            "array": [
+              "u8",
+              4
+            ]
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -1322,6 +1352,41 @@
         {
           "name": "swapProgram",
           "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "simulatedSwapAmountOut",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "simulatedTs",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "minimumAmountOut",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "swapAmountIn",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "simulatedAmountOutNextBest",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "nextBestAggregator",
+          "type": {
+            "array": [
+              "u8",
+              4
+            ]
+          },
           "index": false
         }
       ]
