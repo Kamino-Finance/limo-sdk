@@ -1,6 +1,7 @@
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { Order } from "../rpc_client/accounts/Order";
 import Decimal from "decimal.js";
+import { BN } from "@coral-xyz/anchor";
 
 export type OrderStateAndAddress = {
   state: Order;
@@ -86,3 +87,21 @@ export class FilledOrderQueue<V> {
     return [...this.queue];
   }
 }
+
+export type LogUserSwapBalancesIxArgs = {
+  user: PublicKey;
+  inputMint: PublicKey;
+  outputMint: PublicKey;
+  inputMintProgramId: PublicKey;
+  outputMintProgramId: PublicKey;
+  swapProgarmId: PublicKey;
+  simulatedSwapAmountOut: BN;
+  simulatedTs: BN;
+  minimumAmountOut: BN;
+  swapAmountIn: BN;
+  simulatedAmountOutNextBest: BN;
+  aggregatorId: number;
+  nextBestAggregatorId: number;
+  pdaReferrer: PublicKey;
+  voteAccount?: PublicKey;
+};

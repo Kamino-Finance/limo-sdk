@@ -41,6 +41,7 @@ import {
   checkIfAccountExists,
   getEventAuthorityPDA,
   getUserSwapBalanceStatePDA,
+  LogUserSwapBalancesIxArgs,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -1947,28 +1948,27 @@ export class LimoClient {
    * @param outputMintProgramId - the output mint program id
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
-  logUserSwapBalancesIxs(
-    user: PublicKey,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    swapProgarmId: PublicKey,
-    simulatedSwapAmountOut: BN,
-    simulatedTs: BN,
-    minimumAmountOut: BN,
-    swapAmountIn: BN,
-    simulatedAmountOutNextBest: BN,
-    nextBestAggregator: string,
-    pdaReferrer: PublicKey = this.programId,
-    voteAccount?: PublicKey,
-  ): {
+  logUserSwapBalancesIxs(args: LogUserSwapBalancesIxArgs): {
     beforeSwapIx: TransactionInstruction;
     afterSwapIx: TransactionInstruction;
   } {
-    if (nextBestAggregator.length > 4) {
-      throw new Error("nextBestAggregator string must be 4 bytes");
-    }
+    const {
+      user,
+      inputMint,
+      outputMint,
+      inputMintProgramId,
+      outputMintProgramId,
+      swapProgarmId,
+      simulatedSwapAmountOut,
+      simulatedTs,
+      minimumAmountOut,
+      swapAmountIn,
+      simulatedAmountOutNextBest,
+      aggregatorId,
+      nextBestAggregatorId,
+      pdaReferrer = args.pdaReferrer ?? this.programId,
+      voteAccount,
+    } = args;
     const inputMintAta = getAssociatedTokenAddressSync(
       inputMint,
       user,
@@ -2000,9 +2000,7 @@ export class LimoClient {
       sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
     });
 
-    const nextBestAggregatorBytes = Buffer.alloc(4);
-
-    nextBestAggregatorBytes.write(nextBestAggregator, "utf-8");
+    const padding: number[] = Array(2).fill(0);
 
     const logIxEnd = logUserSwapBalancesEnd(
       {
@@ -2011,7 +2009,9 @@ export class LimoClient {
         minimumAmountOut,
         swapAmountIn,
         simulatedAmountOutNextBest,
-        nextBestAggregator: Array.from(nextBestAggregatorBytes),
+        aggregator: aggregatorId,
+        nextBestAggregator: nextBestAggregatorId,
+        padding,
       },
       {
         baseAccounts: {
@@ -2068,24 +2068,24 @@ export class LimoClient {
     mockSwapSigners: Keypair[] = [],
     swapProgarmId: PublicKey,
     voteAccount?: PublicKey,
-    simulatedAccountString?: string,
   ): Promise<TransactionSignature> {
-    const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs(
-      user.publicKey,
+    const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs({
+      user: user.publicKey,
       inputMint,
       outputMint,
       inputMintProgramId,
       outputMintProgramId,
       swapProgarmId,
-      new BN(0),
-      new BN(0),
-      new BN(0),
-      new BN(0),
-      new BN(0),
-      simulatedAccountString ? simulatedAccountString : "none",
-      this.programId,
+      simulatedSwapAmountOut: new BN(0),
+      simulatedTs: new BN(0),
+      minimumAmountOut: new BN(0),
+      swapAmountIn: new BN(0),
+      simulatedAmountOutNextBest: new BN(0),
+      aggregatorId: 0,
+      nextBestAggregatorId: 0,
+      pdaReferrer: this.programId,
       voteAccount,
-    );
+    });
 
     const sig = await this.processTxn(
       user,

@@ -880,11 +880,19 @@
           "type": "u64"
         },
         {
+          "name": "aggregator",
+          "type": "u8"
+        },
+        {
           "name": "nextBestAggregator",
+          "type": "u8"
+        },
+        {
+          "name": "padding",
           "type": {
             "array": [
               "u8",
-              4
+              2
             ]
           }
         }
@@ -1380,13 +1388,13 @@
           "index": false
         },
         {
+          "name": "aggregator",
+          "type": "u8",
+          "index": false
+        },
+        {
           "name": "nextBestAggregator",
-          "type": {
-            "array": [
-              "u8",
-              4
-            ]
-          },
+          "type": "u8",
           "index": false
         }
       ]

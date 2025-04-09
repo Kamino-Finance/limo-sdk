@@ -14,7 +14,9 @@ export interface LogUserSwapBalancesEndArgs {
   minimumAmountOut: BN;
   swapAmountIn: BN;
   simulatedAmountOutNextBest: BN;
-  nextBestAggregator: Array<number>;
+  aggregator: number;
+  nextBestAggregator: number;
+  padding: Array<number>;
 }
 
 export interface LogUserSwapBalancesEndAccounts {
@@ -42,7 +44,9 @@ export const layout = borsh.struct([
   borsh.u64("minimumAmountOut"),
   borsh.u64("swapAmountIn"),
   borsh.u64("simulatedAmountOutNextBest"),
-  borsh.array(borsh.u8(), 4, "nextBestAggregator"),
+  borsh.u8("aggregator"),
+  borsh.u8("nextBestAggregator"),
+  borsh.array(borsh.u8(), 2, "padding"),
 ]);
 
 export function logUserSwapBalancesEnd(
@@ -102,7 +106,9 @@ export function logUserSwapBalancesEnd(
       minimumAmountOut: args.minimumAmountOut,
       swapAmountIn: args.swapAmountIn,
       simulatedAmountOutNextBest: args.simulatedAmountOutNextBest,
+      aggregator: args.aggregator,
       nextBestAggregator: args.nextBestAggregator,
+      padding: args.padding,
     },
     buffer,
   );
