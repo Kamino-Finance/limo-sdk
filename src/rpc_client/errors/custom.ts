@@ -45,7 +45,7 @@ export type CustomError =
   | InvalidTokenMint
   | InvalidTokenAuthority
   | InvalidParameterType
-  | TakerIsNotCounterparty;
+  | CounterpartyDisallowed;
 
 export class OrderCanNotBeCanceled extends Error {
   static readonly code = 6000;
@@ -568,10 +568,10 @@ export class InvalidParameterType extends Error {
   }
 }
 
-export class TakerIsNotCounterparty extends Error {
+export class CounterpartyDisallowed extends Error {
   static readonly code = 6046;
   readonly code = 6046;
-  readonly name = "TakerIsNotCounterparty";
+  readonly name = "CounterpartyDisallowed";
   readonly msg = "The counterparty is not the taker";
 
   constructor(readonly logs?: string[]) {
@@ -674,7 +674,7 @@ export function fromCode(code: number, logs?: string[]): CustomError | null {
     case 6045:
       return new InvalidParameterType(logs);
     case 6046:
-      return new TakerIsNotCounterparty(logs);
+      return new CounterpartyDisallowed(logs);
   }
 
   return null;

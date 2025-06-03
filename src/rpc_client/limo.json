@@ -1683,7 +1683,7 @@
     },
     {
       "code": 6046,
-      "name": "TakerIsNotCounterparty",
+      "name": "CounterpartyDisallowed",
       "msg": "The counterparty is not the taker"
     }
   ]
