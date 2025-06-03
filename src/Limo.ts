@@ -42,6 +42,7 @@ import {
   getEventAuthorityPDA,
   getUserSwapBalanceStatePDA,
   LogUserSwapBalancesIxArgs,
+  CreateOrderWithParamsArgs,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -49,7 +50,7 @@ import { Keypair } from "@solana/web3.js";
 import { GlobalConfig } from "./rpc_client/accounts/GlobalConfig";
 import Decimal from "decimal.js";
 import { Order } from "./rpc_client/accounts/Order";
-import { UpdateGlobalConfigMode } from "./rpc_client/types";
+import { UpdateGlobalConfigMode, UpdateOrderMode } from "./rpc_client/types";
 import {
   getAssociatedTokenAddressSync,
   NATIVE_MINT,
@@ -1269,6 +1270,92 @@ export class LimoClient {
   }
 
   /**
+   * Get the create initialize order instruction
+   * @param user - the user address
+   * @param inputMint - the input mint address
+   * @param outputMint - the output mint address
+   * @param inputAmountLamports - the input amount in lamports
+   * @param outputAmountLamports - the output amount in lamports
+   * @param permissionless - whether the order is permissionless
+   * @param counterparty - the counterparty address
+   * @param inputMintProgramId - the input mint program id
+   * @param outputMintProgramId - the output mint program id
+   * @param globalConfigOverride - the global config override
+   * @returns the create initialize order instruction and keypair to sign the transaction with
+   * @throws error if mint decimals not found for mint
+   */
+  async createOrderGenericWithParamsIx(
+    args: CreateOrderWithParamsArgs,
+  ): Promise<[TransactionInstruction[], Keypair]> {
+    const {
+      user,
+      inputMint,
+      outputMint,
+      inputAmountLamports,
+      outputAmountLamports,
+      inputMintProgramId,
+      outputMintProgramId,
+      permissionless,
+      counterparty,
+      globalConfigOverride,
+      wrapUnwrapSol = args.wrapUnwrapSol !== undefined
+        ? args.wrapUnwrapSol
+        : true,
+      withInitVault,
+    } = args;
+
+    const [ixs, order] = await this.createOrderGenericIx(
+      user,
+      inputMint,
+      outputMint,
+      inputAmountLamports,
+      outputAmountLamports,
+      inputMintProgramId,
+      outputMintProgramId,
+      globalConfigOverride,
+      wrapUnwrapSol,
+      withInitVault,
+    );
+
+    if (permissionless) {
+      const updateOrderPermissionlessIx = this.updateOrderIx(
+        "UpdatePermissionless",
+        true,
+        user,
+        globalConfigOverride ? globalConfigOverride : this._globalConfig,
+        order.publicKey,
+      );
+      ixs.push(...updateOrderPermissionlessIx);
+    }
+
+    if (counterparty) {
+      const updateOrderCounterpartyIx = this.updateOrderIx(
+        "UpdateCounterparty",
+        counterparty,
+        user,
+        globalConfigOverride ? globalConfigOverride : this._globalConfig,
+        order.publicKey,
+      );
+      ixs.push(...updateOrderCounterpartyIx);
+    }
+
+    return [ixs, order];
+  }
+
+  async createOrderGenericWithParams(
+    args: CreateOrderWithParamsArgs,
+    user: Keypair,
+    mode: string = "execute",
+  ): Promise<[TransactionSignature, Keypair]> {
+    const [ixs, order] = await this.createOrderGenericWithParamsIx(args);
+
+    const log = "Create Order: " + order.publicKey.toString();
+    const sig = await this.processTxn(user, ixs, mode, log, [order]);
+
+    return [sig, order];
+  }
+
+  /**
    * Create an order
    * @param user - the user keypair
    * @param inputMint - the input mint address
@@ -2352,6 +2439,51 @@ export class LimoClient {
     const sig = await this.processTxn(user, ixs, mode, log, [orderKp]);
 
     return [sig, orderKp];
+  }
+
+  updateOrderIx(
+    mode: string,
+    value: boolean | PublicKey,
+    maker: PublicKey,
+    globalConfig: PublicKey,
+    order: PublicKey,
+  ) {
+    const ixs: TransactionInstruction[] = [];
+
+    ixs.push(
+      limoOperations.updateOrder(
+        UpdateOrderMode.fromDecoded({ [mode]: "" }),
+        value,
+        maker,
+        globalConfig,
+        order,
+        this.programId,
+      ),
+    );
+
+    return ixs;
+  }
+
+  updateOrder(
+    maker: Keypair,
+    updateMode: string,
+    value: boolean | PublicKey,
+    order: PublicKey,
+    mode: string,
+  ): Promise<TransactionSignature> {
+    const ixs = this.updateOrderIx(
+      updateMode,
+      value,
+      maker.publicKey,
+      this._globalConfig,
+      order,
+    );
+
+    const log = `Update order: ${order.toString()} with mode ${updateMode} and value ${value.toString()}`;
+
+    console.log("updateOrder", log);
+
+    return this.processTxn(maker, ixs, mode, log, []);
   }
 
   /**

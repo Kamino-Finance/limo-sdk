@@ -14,9 +14,12 @@ import {
 import { BN } from "@coral-xyz/anchor";
 import {
   UpdateGlobalConfigMode,
+  UpdateOrderMode,
   UpdateGlobalConfigModeKind,
+  UpdateOrderModeKind,
 } from "../rpc_client/types/index";
 import { GlobalConfig } from "../rpc_client/accounts";
+import { UpdateOrderArgs } from "../rpc_client/instructions";
 
 export interface OrderParams {
   quoteTokenMint: PublicKey;
@@ -141,6 +144,29 @@ export function createOrder(
     orderType: orderParams.side === "bid" ? 0 : 1,
   };
   let ix = Instructions.createOrder(args, accounts, programId);
+
+  return ix;
+}
+
+export function updateOrder(
+  mode: UpdateOrderModeKind,
+  value: boolean | PublicKey,
+  maker: PublicKey,
+  globalConfig: PublicKey,
+  order: PublicKey,
+  programId: PublicKey,
+): TransactionInstruction {
+  let args: UpdateOrderArgs = {
+    mode,
+    value: encodedUpdateOrderValue(mode, value),
+  };
+  let accounts: Instructions.UpdateOrderAccounts = {
+    maker,
+    globalConfig,
+    order,
+  };
+
+  let ix = Instructions.updateOrder(args, accounts, programId);
 
   return ix;
 }
@@ -423,6 +449,30 @@ export function updateGlobalConfigAdminIx(
   let ix = Instructions.updateGlobalConfigAdmin(accounts, programId);
 
   return ix;
+}
+
+function encodedUpdateOrderValue(
+  mode: UpdateOrderModeKind,
+  value: boolean | PublicKey,
+): Uint8Array {
+  let valueBoolean: number;
+  let valuePublicKey: Buffer;
+  let valueData: Buffer;
+  switch (mode.discriminator) {
+    case UpdateOrderMode.UpdatePermissionless.discriminator:
+      valueBoolean = (value as boolean) ? 1 : 0;
+      valueData = Buffer.alloc(1);
+      valueData.writeUIntLE(valueBoolean, 0, 1);
+      break;
+    case UpdateOrderMode.UpdateCounterparty.discriminator:
+      valuePublicKey = (value as PublicKey).toBuffer();
+      valueData = Buffer.alloc(32);
+      valuePublicKey.copy(valueData, 0);
+      break;
+  }
+
+  const uint8Array = new Uint8Array(valueData);
+  return uint8Array;
 }
 
 function encodedUpdateGlobalConfigValue(

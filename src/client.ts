@@ -33,6 +33,7 @@ import {
 import {
   updateGlobalConfig,
   updateGlobalConfigAdmin,
+  updateOrder,
 } from "./commands/updateCommands";
 import {
   listenToOrderChanges,
@@ -326,6 +327,22 @@ async function main() {
         "final balance:",
         balance.value.uiAmount,
       );
+    });
+
+  commands
+    .command("update-order")
+    .requiredOption("--order <string>", "Order address")
+    .requiredOption(
+      "--update-mode <string>",
+      "string value of the update mode, found in rpc_client/types/UpdateOrderMode.ts",
+    )
+    .requiredOption(
+      "--mode <string>",
+      "multisig - will print bs58 txn only, simulate - will print bs64 txn explorer link and simulation, execute - to execute txn",
+    )
+    .requiredOption("--value <string>")
+    .action(async ({ order, updateMode, value, mode }) => {
+      await updateOrder(order, updateMode, value, mode);
     });
 
   await commands.parseAsync();

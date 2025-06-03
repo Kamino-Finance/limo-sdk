@@ -2,6 +2,7 @@ import * as OrderStatus from "./OrderStatus";
 import * as OrderType from "./OrderType";
 import * as UpdateGlobalConfigMode from "./UpdateGlobalConfigMode";
 import * as UpdateGlobalConfigValue from "./UpdateGlobalConfigValue";
+import * as UpdateOrderMode from "./UpdateOrderMode";
 
 export { OrderStatus };
 
@@ -56,3 +57,12 @@ export type UpdateGlobalConfigValueJSON =
   | UpdateGlobalConfigValue.U16JSON
   | UpdateGlobalConfigValue.U64JSON
   | UpdateGlobalConfigValue.PubkeyJSON;
+
+export { UpdateOrderMode };
+
+export type UpdateOrderModeKind =
+  | UpdateOrderMode.UpdatePermissionless
+  | UpdateOrderMode.UpdateCounterparty;
+export type UpdateOrderModeJSON =
+  | UpdateOrderMode.UpdatePermissionlessJSON
+  | UpdateOrderMode.UpdateCounterpartyJSON;

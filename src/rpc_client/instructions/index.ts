@@ -4,6 +4,8 @@ export { initializeVault } from "./initializeVault";
 export type { InitializeVaultAccounts } from "./initializeVault";
 export { createOrder } from "./createOrder";
 export type { CreateOrderArgs, CreateOrderAccounts } from "./createOrder";
+export { updateOrder } from "./updateOrder";
+export type { UpdateOrderArgs, UpdateOrderAccounts } from "./updateOrder";
 export { closeOrderAndClaimTip } from "./closeOrderAndClaimTip";
 export type { CloseOrderAndClaimTipAccounts } from "./closeOrderAndClaimTip";
 export { takeOrder } from "./takeOrder";

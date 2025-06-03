@@ -43,7 +43,9 @@ export type CustomError =
   | InvalidTokenAccountOwner
   | InvalidAccount
   | InvalidTokenMint
-  | InvalidTokenAuthority;
+  | InvalidTokenAuthority
+  | InvalidParameterType
+  | TakerIsNotCounterparty;
 
 export class OrderCanNotBeCanceled extends Error {
   static readonly code = 6000;
@@ -555,6 +557,28 @@ export class InvalidTokenAuthority extends Error {
   }
 }
 
+export class InvalidParameterType extends Error {
+  static readonly code = 6045;
+  readonly code = 6045;
+  readonly name = "InvalidParameterType";
+  readonly msg = "The provided parameter type is invalid";
+
+  constructor(readonly logs?: string[]) {
+    super("6045: The provided parameter type is invalid");
+  }
+}
+
+export class TakerIsNotCounterparty extends Error {
+  static readonly code = 6046;
+  readonly code = 6046;
+  readonly name = "TakerIsNotCounterparty";
+  readonly msg = "The counterparty is not the taker";
+
+  constructor(readonly logs?: string[]) {
+    super("6046: The counterparty is not the taker");
+  }
+}
+
 export function fromCode(code: number, logs?: string[]): CustomError | null {
   switch (code) {
     case 6000:
@@ -647,6 +671,10 @@ export function fromCode(code: number, logs?: string[]): CustomError | null {
       return new InvalidTokenMint(logs);
     case 6044:
       return new InvalidTokenAuthority(logs);
+    case 6045:
+      return new InvalidParameterType(logs);
+    case 6046:
+      return new TakerIsNotCounterparty(logs);
   }
 
   return null;

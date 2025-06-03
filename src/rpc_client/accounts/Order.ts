@@ -35,6 +35,7 @@ export interface OrderFields {
    * modified until the flash operation is completed.
    */
   flashIxLock: number;
+  permissionless: number;
   padding0: Array<number>;
   lastUpdatedTimestamp: BN;
   /**
@@ -43,6 +44,7 @@ export interface OrderFields {
    * between start and end balances in order to compute the amount received from a potential swap
    */
   flashStartTakerOutputBalance: BN;
+  counterparty: PublicKey;
   padding: Array<BN>;
 }
 
@@ -77,6 +79,7 @@ export interface OrderJSON {
    * modified until the flash operation is completed.
    */
   flashIxLock: number;
+  permissionless: number;
   padding0: Array<number>;
   lastUpdatedTimestamp: string;
   /**
@@ -85,6 +88,7 @@ export interface OrderJSON {
    * between start and end balances in order to compute the amount received from a potential swap
    */
   flashStartTakerOutputBalance: string;
+  counterparty: string;
   padding: Array<string>;
 }
 
@@ -119,6 +123,7 @@ export class Order {
    * modified until the flash operation is completed.
    */
   readonly flashIxLock: number;
+  readonly permissionless: number;
   readonly padding0: Array<number>;
   readonly lastUpdatedTimestamp: BN;
   /**
@@ -127,6 +132,7 @@ export class Order {
    * between start and end balances in order to compute the amount received from a potential swap
    */
   readonly flashStartTakerOutputBalance: BN;
+  readonly counterparty: PublicKey;
   readonly padding: Array<BN>;
 
   static readonly discriminator = Buffer.from([
@@ -150,10 +156,12 @@ export class Order {
     borsh.u8("status"),
     borsh.u8("inVaultBump"),
     borsh.u8("flashIxLock"),
-    borsh.array(borsh.u8(), 4, "padding0"),
+    borsh.u8("permissionless"),
+    borsh.array(borsh.u8(), 3, "padding0"),
     borsh.u64("lastUpdatedTimestamp"),
     borsh.u64("flashStartTakerOutputBalance"),
-    borsh.array(borsh.u64(), 19, "padding"),
+    borsh.publicKey("counterparty"),
+    borsh.array(borsh.u64(), 15, "padding"),
   ]);
 
   constructor(fields: OrderFields) {
@@ -173,9 +181,11 @@ export class Order {
     this.status = fields.status;
     this.inVaultBump = fields.inVaultBump;
     this.flashIxLock = fields.flashIxLock;
+    this.permissionless = fields.permissionless;
     this.padding0 = fields.padding0;
     this.lastUpdatedTimestamp = fields.lastUpdatedTimestamp;
     this.flashStartTakerOutputBalance = fields.flashStartTakerOutputBalance;
+    this.counterparty = fields.counterparty;
     this.padding = fields.padding;
   }
 
@@ -239,9 +249,11 @@ export class Order {
       status: dec.status,
       inVaultBump: dec.inVaultBump,
       flashIxLock: dec.flashIxLock,
+      permissionless: dec.permissionless,
       padding0: dec.padding0,
       lastUpdatedTimestamp: dec.lastUpdatedTimestamp,
       flashStartTakerOutputBalance: dec.flashStartTakerOutputBalance,
+      counterparty: dec.counterparty,
       padding: dec.padding,
     });
   }
@@ -264,10 +276,12 @@ export class Order {
       status: this.status,
       inVaultBump: this.inVaultBump,
       flashIxLock: this.flashIxLock,
+      permissionless: this.permissionless,
       padding0: this.padding0,
       lastUpdatedTimestamp: this.lastUpdatedTimestamp.toString(),
       flashStartTakerOutputBalance:
         this.flashStartTakerOutputBalance.toString(),
+      counterparty: this.counterparty.toString(),
       padding: this.padding.map((item) => item.toString()),
     };
   }
@@ -290,9 +304,11 @@ export class Order {
       status: obj.status,
       inVaultBump: obj.inVaultBump,
       flashIxLock: obj.flashIxLock,
+      permissionless: obj.permissionless,
       padding0: obj.padding0,
       lastUpdatedTimestamp: new BN(obj.lastUpdatedTimestamp),
       flashStartTakerOutputBalance: new BN(obj.flashStartTakerOutputBalance),
+      counterparty: new PublicKey(obj.counterparty),
       padding: obj.padding.map((item) => new BN(item)),
     });
   }

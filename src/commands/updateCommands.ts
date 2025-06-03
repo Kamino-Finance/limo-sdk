@@ -1,8 +1,8 @@
-import { PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { initializeClient } from "./utils";
 import { getLimoProgramId } from "../utils";
 import { LimoClient } from "../Limo";
-import { UpdateGlobalConfigMode } from "../rpc_client/types";
+import { UpdateGlobalConfigMode, UpdateOrderMode } from "../rpc_client/types";
 
 export async function updateGlobalConfig(
   updateMode: string,
@@ -64,4 +64,37 @@ export async function updateGlobalConfigAdmin(
   await client.updateGlobalConfigAdmin(env.admin, mode);
 
   console.log("Global Config Admin updated");
+}
+
+export async function updateOrder(
+  order: PublicKey,
+  updateMode: string,
+  value: string,
+  mode: string,
+) {
+  const admin = process.env.ADMIN;
+  const rpc = process.env.RPC_ENV;
+  const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
+  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
+  const client = new LimoClient(
+    env.provider.connection,
+    new PublicKey(globalConfig!),
+  );
+
+  let valueCasted: boolean | PublicKey;
+
+  switch (UpdateOrderMode.fromDecoded({ [updateMode]: "" }).discriminator) {
+    case UpdateOrderMode.UpdatePermissionless.discriminator:
+      valueCasted = Boolean(value);
+      break;
+    case UpdateOrderMode.UpdateCounterparty.discriminator:
+      valueCasted = new PublicKey(value);
+      break;
+    default:
+      throw new Error("Invalid mode");
+  }
+
+  await client.updateOrder(env.admin, updateMode, valueCasted, order, mode);
+
+  console.log("Order updated");
 }

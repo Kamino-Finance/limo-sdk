@@ -105,3 +105,18 @@ export type LogUserSwapBalancesIxArgs = {
   pdaReferrer: PublicKey;
   voteAccount?: PublicKey;
 };
+
+export type CreateOrderWithParamsArgs = {
+  user: PublicKey;
+  inputMint: PublicKey;
+  outputMint: PublicKey;
+  inputAmountLamports: BN;
+  outputAmountLamports: BN;
+  inputMintProgramId: PublicKey;
+  outputMintProgramId: PublicKey;
+  permissionless: boolean;
+  counterparty?: PublicKey;
+  globalConfigOverride?: PublicKey;
+  wrapUnwrapSol?: boolean;
+  withInitVault?: boolean;
+};

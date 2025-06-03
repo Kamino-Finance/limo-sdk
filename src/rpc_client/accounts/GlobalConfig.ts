@@ -10,7 +10,6 @@ export interface GlobalConfigFields {
   newOrdersBlocked: number;
   ordersTakingBlocked: number;
   hostFeeBps: number;
-  isOrderTakingPermissionless: number;
   padding0: Array<number>;
   /** The number of seconds after an order has been updated before it can be closed */
   orderCloseDelaySeconds: BN;
@@ -46,7 +45,6 @@ export interface GlobalConfigJSON {
   newOrdersBlocked: number;
   ordersTakingBlocked: number;
   hostFeeBps: number;
-  isOrderTakingPermissionless: number;
   padding0: Array<number>;
   /** The number of seconds after an order has been updated before it can be closed */
   orderCloseDelaySeconds: string;
@@ -82,7 +80,6 @@ export class GlobalConfig {
   readonly newOrdersBlocked: number;
   readonly ordersTakingBlocked: number;
   readonly hostFeeBps: number;
-  readonly isOrderTakingPermissionless: number;
   readonly padding0: Array<number>;
   /** The number of seconds after an order has been updated before it can be closed */
   readonly orderCloseDelaySeconds: BN;
@@ -121,8 +118,7 @@ export class GlobalConfig {
     borsh.u8("newOrdersBlocked"),
     borsh.u8("ordersTakingBlocked"),
     borsh.u16("hostFeeBps"),
-    borsh.u8("isOrderTakingPermissionless"),
-    borsh.array(borsh.u8(), 1, "padding0"),
+    borsh.array(borsh.u8(), 2, "padding0"),
     borsh.u64("orderCloseDelaySeconds"),
     borsh.array(borsh.u64(), 9, "padding1"),
     borsh.u64("pdaAuthorityPreviousLamportsBalance"),
@@ -143,7 +139,6 @@ export class GlobalConfig {
     this.newOrdersBlocked = fields.newOrdersBlocked;
     this.ordersTakingBlocked = fields.ordersTakingBlocked;
     this.hostFeeBps = fields.hostFeeBps;
-    this.isOrderTakingPermissionless = fields.isOrderTakingPermissionless;
     this.padding0 = fields.padding0;
     this.orderCloseDelaySeconds = fields.orderCloseDelaySeconds;
     this.padding1 = fields.padding1;
@@ -209,7 +204,6 @@ export class GlobalConfig {
       newOrdersBlocked: dec.newOrdersBlocked,
       ordersTakingBlocked: dec.ordersTakingBlocked,
       hostFeeBps: dec.hostFeeBps,
-      isOrderTakingPermissionless: dec.isOrderTakingPermissionless,
       padding0: dec.padding0,
       orderCloseDelaySeconds: dec.orderCloseDelaySeconds,
       padding1: dec.padding1,
@@ -234,7 +228,6 @@ export class GlobalConfig {
       newOrdersBlocked: this.newOrdersBlocked,
       ordersTakingBlocked: this.ordersTakingBlocked,
       hostFeeBps: this.hostFeeBps,
-      isOrderTakingPermissionless: this.isOrderTakingPermissionless,
       padding0: this.padding0,
       orderCloseDelaySeconds: this.orderCloseDelaySeconds.toString(),
       padding1: this.padding1.map((item) => item.toString()),
@@ -259,7 +252,6 @@ export class GlobalConfig {
       newOrdersBlocked: obj.newOrdersBlocked,
       ordersTakingBlocked: obj.ordersTakingBlocked,
       hostFeeBps: obj.hostFeeBps,
-      isOrderTakingPermissionless: obj.isOrderTakingPermissionless,
       padding0: obj.padding0,
       orderCloseDelaySeconds: new BN(obj.orderCloseDelaySeconds),
       padding1: obj.padding1.map((item) => new BN(item)),
