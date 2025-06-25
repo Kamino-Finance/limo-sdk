@@ -929,6 +929,97 @@
           }
         }
       ]
+    },
+    {
+      "name": "assertUserSwapBalancesStart",
+      "accounts": [
+        {
+          "name": "maker",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "inputTa",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "outputTa",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userSwapBalanceState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "sysvarInstructions",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "assertUserSwapBalancesEnd",
+      "accounts": [
+        {
+          "name": "maker",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "inputTa",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "outputTa",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userSwapBalanceState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "sysvarInstructions",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "maxInputAmountChange",
+          "type": "u64"
+        },
+        {
+          "name": "minOutputAmountChange",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -1685,6 +1776,26 @@
       "code": 6046,
       "name": "CounterpartyDisallowed",
       "msg": "The counterparty is not the taker"
+    },
+    {
+      "code": 6047,
+      "name": "SwapInputAmountTooLarge",
+      "msg": "The swap input amount is too large"
+    },
+    {
+      "code": 6048,
+      "name": "SwapOutputAmountTooSmall",
+      "msg": "The swap output amount is too small"
+    },
+    {
+      "code": 6049,
+      "name": "SwapInputInvalidBalanceChange",
+      "msg": "The swap input balance change is positive, expected negative"
+    },
+    {
+      "code": 6050,
+      "name": "SwapOutputInvalidBalanceChange",
+      "msg": "The swap output balance change is negative, expected positive"
     }
   ]
 }

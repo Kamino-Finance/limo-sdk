@@ -726,6 +726,19 @@ export function getUserSwapBalanceStatePDA(
   return swapBalanceState;
 }
 
+export function getUserSwapBalanceAssertStatePDA(
+  maker: PublicKey,
+  programId: PublicKey,
+): PublicKey {
+  const [swapBalanceState, _swapBalanceStateBump] =
+    anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("assert_swap"), maker.toBuffer()],
+      programId,
+    );
+
+  return swapBalanceState;
+}
+
 export function getIntermediaryTokenAccountPDA(
   programId: PublicKey,
   order: PublicKey,

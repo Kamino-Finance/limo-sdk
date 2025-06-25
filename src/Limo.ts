@@ -43,6 +43,8 @@ import {
   getUserSwapBalanceStatePDA,
   LogUserSwapBalancesIxArgs,
   CreateOrderWithParamsArgs,
+  AssertUserSwapBalancesIxArgs,
+  getUserSwapBalanceAssertStatePDA,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
@@ -58,7 +60,11 @@ import {
 } from "@solana/spl-token";
 import { createCloseAccountInstruction } from "@solana/spl-token";
 import base58 from "bs58";
-import { logUserSwapBalancesStart } from "./rpc_client/instructions";
+import {
+  assertUserSwapBalancesEnd,
+  assertUserSwapBalancesStart,
+  logUserSwapBalancesStart,
+} from "./rpc_client/instructions";
 import { logUserSwapBalancesEnd } from "./rpc_client/instructions";
 import * as anchor from "@coral-xyz/anchor";
 
@@ -2184,6 +2190,129 @@ export class LimoClient {
     );
 
     console.log("logUserSwapBalances", sig);
+
+    return sig;
+  }
+
+  /**
+   * Get the create close order instruction
+   * @param user - the user address
+   * @param inputMont - the inputMint for the swap
+   * @param outputMint - the outputMint for the swap
+   * @param inputMintProgramId - the input mint program id
+   * @param outputMintProgramId - the output mint program id
+   * @returns the log ixs - to be used once at the beginning and once at the end
+   */
+  assertUserSwapBalancesIxs(args: AssertUserSwapBalancesIxArgs): {
+    beforeSwapIx: TransactionInstruction;
+    afterSwapIx: TransactionInstruction;
+  } {
+    const {
+      user,
+      inputMint,
+      outputMint,
+      inputMintProgramId,
+      outputMintProgramId,
+      maxInputAmountChange,
+      minOutputAmountChange,
+      inputTa,
+      outputTa,
+    } = args;
+    const inputMintTa = inputTa
+      ? inputTa
+      : getAssociatedTokenAddressSync(
+          inputMint,
+          user,
+          true,
+          inputMintProgramId,
+        );
+    const outputMintTa = outputTa
+      ? outputTa
+      : getAssociatedTokenAddressSync(
+          outputMint,
+          user,
+          true,
+          outputMintProgramId,
+        );
+
+    const userSwapBalanceState = getUserSwapBalanceAssertStatePDA(
+      user,
+      this.programId,
+    );
+
+    const logIxStart = assertUserSwapBalancesStart({
+      maker: user,
+      inputTa: inputMintTa,
+      outputTa: outputMintTa,
+      userSwapBalanceState,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    });
+
+    const logIxEnd = assertUserSwapBalancesEnd(
+      {
+        maxInputAmountChange,
+        minOutputAmountChange,
+      },
+      {
+        maker: user,
+        inputTa: inputMintTa,
+        outputTa: outputMintTa,
+        userSwapBalanceState,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      },
+    );
+
+    return {
+      beforeSwapIx: logIxStart,
+      afterSwapIx: logIxEnd,
+    };
+  }
+
+  /**
+   * Get the create close order instruction
+   * @param user - the user address
+   * @param inputMont - the inputMint for the swap
+   * @param outputMint - the outputMint for the swap
+   * @param inputMintProgramId - the input mint program id
+   * @param outputMintProgramId - the output mint program id
+   * @returns the log ixs - to be used once at the beginning and once at the end
+   */
+  async assertUserSwapBalances(
+    user: Keypair,
+    inputMint: PublicKey,
+    outputMint: PublicKey,
+    inputMintProgramId: PublicKey,
+    outputMintProgramId: PublicKey,
+    maxInputAmountChange: BN,
+    minOutputAmountChange: BN,
+    setupIxs: TransactionInstruction[] = [],
+    mockSwapIxs: TransactionInstruction[] = [],
+    mockSwapSigners: Keypair[] = [],
+  ): Promise<TransactionSignature> {
+    const { beforeSwapIx, afterSwapIx } = this.assertUserSwapBalancesIxs({
+      user: user.publicKey,
+      inputMint,
+      outputMint,
+      inputMintProgramId,
+      outputMintProgramId,
+      maxInputAmountChange,
+      minOutputAmountChange,
+    });
+
+    const sig = await this.processTxn(
+      user,
+      [...setupIxs, beforeSwapIx, ...mockSwapIxs, afterSwapIx],
+      "execute",
+      "",
+      mockSwapSigners,
+      300_000,
+    );
+
+    console.log("assertUserSwapBalances", sig);
 
     return sig;
   }

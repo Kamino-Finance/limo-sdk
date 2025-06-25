@@ -36,3 +36,10 @@ export type {
   LogUserSwapBalancesEndArgs,
   LogUserSwapBalancesEndAccounts,
 } from "./logUserSwapBalancesEnd";
+export { assertUserSwapBalancesStart } from "./assertUserSwapBalancesStart";
+export type { AssertUserSwapBalancesStartAccounts } from "./assertUserSwapBalancesStart";
+export { assertUserSwapBalancesEnd } from "./assertUserSwapBalancesEnd";
+export type {
+  AssertUserSwapBalancesEndArgs,
+  AssertUserSwapBalancesEndAccounts,
+} from "./assertUserSwapBalancesEnd";

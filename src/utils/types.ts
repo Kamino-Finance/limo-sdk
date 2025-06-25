@@ -106,6 +106,18 @@ export type LogUserSwapBalancesIxArgs = {
   voteAccount?: PublicKey;
 };
 
+export type AssertUserSwapBalancesIxArgs = {
+  user: PublicKey;
+  inputMint: PublicKey;
+  outputMint: PublicKey;
+  inputMintProgramId: PublicKey;
+  outputMintProgramId: PublicKey;
+  maxInputAmountChange: BN;
+  minOutputAmountChange: BN;
+  inputTa?: PublicKey;
+  outputTa?: PublicKey;
+};
+
 export type CreateOrderWithParamsArgs = {
   user: PublicKey;
   inputMint: PublicKey;

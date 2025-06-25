@@ -45,7 +45,11 @@ export type CustomError =
   | InvalidTokenMint
   | InvalidTokenAuthority
   | InvalidParameterType
-  | CounterpartyDisallowed;
+  | CounterpartyDisallowed
+  | SwapInputAmountTooLarge
+  | SwapOutputAmountTooSmall
+  | SwapInputInvalidBalanceChange
+  | SwapOutputInvalidBalanceChange;
 
 export class OrderCanNotBeCanceled extends Error {
   static readonly code = 6000;
@@ -579,6 +583,53 @@ export class CounterpartyDisallowed extends Error {
   }
 }
 
+export class SwapInputAmountTooLarge extends Error {
+  static readonly code = 6047;
+  readonly code = 6047;
+  readonly name = "SwapInputAmountTooLarge";
+  readonly msg = "The swap input amount is too large";
+
+  constructor(readonly logs?: string[]) {
+    super("6047: The swap input amount is too large");
+  }
+}
+
+export class SwapOutputAmountTooSmall extends Error {
+  static readonly code = 6048;
+  readonly code = 6048;
+  readonly name = "SwapOutputAmountTooSmall";
+  readonly msg = "The swap output amount is too small";
+
+  constructor(readonly logs?: string[]) {
+    super("6048: The swap output amount is too small");
+  }
+}
+
+export class SwapInputInvalidBalanceChange extends Error {
+  static readonly code = 6049;
+  readonly code = 6049;
+  readonly name = "SwapInputInvalidBalanceChange";
+  readonly msg = "The swap input balance change is positive, expected negative";
+
+  constructor(readonly logs?: string[]) {
+    super("6049: The swap input balance change is positive, expected negative");
+  }
+}
+
+export class SwapOutputInvalidBalanceChange extends Error {
+  static readonly code = 6050;
+  readonly code = 6050;
+  readonly name = "SwapOutputInvalidBalanceChange";
+  readonly msg =
+    "The swap output balance change is negative, expected positive";
+
+  constructor(readonly logs?: string[]) {
+    super(
+      "6050: The swap output balance change is negative, expected positive",
+    );
+  }
+}
+
 export function fromCode(code: number, logs?: string[]): CustomError | null {
   switch (code) {
     case 6000:
@@ -675,6 +726,14 @@ export function fromCode(code: number, logs?: string[]): CustomError | null {
       return new InvalidParameterType(logs);
     case 6046:
       return new CounterpartyDisallowed(logs);
+    case 6047:
+      return new SwapInputAmountTooLarge(logs);
+    case 6048:
+      return new SwapOutputAmountTooSmall(logs);
+    case 6049:
+      return new SwapInputInvalidBalanceChange(logs);
+    case 6050:
+      return new SwapOutputInvalidBalanceChange(logs);
   }
 
   return null;
