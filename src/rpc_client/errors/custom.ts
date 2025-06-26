@@ -587,10 +587,10 @@ export class SwapInputAmountTooLarge extends Error {
   static readonly code = 6047;
   readonly code = 6047;
   readonly name = "SwapInputAmountTooLarge";
-  readonly msg = "The swap input amount is too large";
+  readonly msg = "The swap input amount is larger than the maximum allowed";
 
   constructor(readonly logs?: string[]) {
-    super("6047: The swap input amount is too large");
+    super("6047: The swap input amount is larger than the maximum allowed");
   }
 }
 
@@ -598,10 +598,10 @@ export class SwapOutputAmountTooSmall extends Error {
   static readonly code = 6048;
   readonly code = 6048;
   readonly name = "SwapOutputAmountTooSmall";
-  readonly msg = "The swap output amount is too small";
+  readonly msg = "The swap output amount is smaller than the minimum allowed";
 
   constructor(readonly logs?: string[]) {
-    super("6048: The swap output amount is too small");
+    super("6048: The swap output amount is smaller than the minimum allowed");
   }
 }
 

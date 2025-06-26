@@ -1780,12 +1780,12 @@
     {
       "code": 6047,
       "name": "SwapInputAmountTooLarge",
-      "msg": "The swap input amount is too large"
+      "msg": "The swap input amount is larger than the maximum allowed"
     },
     {
       "code": 6048,
       "name": "SwapOutputAmountTooSmall",
-      "msg": "The swap output amount is too small"
+      "msg": "The swap output amount is smaller than the minimum allowed"
     },
     {
       "code": 6049,
