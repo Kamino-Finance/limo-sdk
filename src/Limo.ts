@@ -2218,22 +2218,37 @@ export class LimoClient {
       inputTa,
       outputTa,
     } = args;
-    const inputMintTa = inputTa
-      ? inputTa
-      : getAssociatedTokenAddressSync(
-          inputMint,
-          user,
-          true,
-          inputMintProgramId,
-        );
-    const outputMintTa = outputTa
-      ? outputTa
-      : getAssociatedTokenAddressSync(
-          outputMint,
-          user,
-          true,
-          outputMintProgramId,
-        );
+    let inputMintTa: PublicKey;
+    if (inputTa) {
+      inputMintTa = inputTa;
+    } else if (inputMint && inputMintProgramId) {
+      inputMintTa = getAssociatedTokenAddressSync(
+        inputMint,
+        user,
+        true,
+        inputMintProgramId,
+      );
+    } else {
+      throw new Error(
+        "Input mint and program ID must be provided if inputTa is not given",
+      );
+    }
+
+    let outputMintTa: PublicKey;
+    if (outputTa) {
+      outputMintTa = outputTa;
+    } else if (outputMint && outputMintProgramId) {
+      outputMintTa = getAssociatedTokenAddressSync(
+        outputMint,
+        user,
+        true,
+        outputMintProgramId,
+      );
+    } else {
+      throw new Error(
+        "Output mint and program ID must be provided if outputTa is not given",
+      );
+    }
 
     const userSwapBalanceState = getUserSwapBalanceAssertStatePDA(
       user,

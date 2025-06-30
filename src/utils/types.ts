@@ -108,10 +108,10 @@ export type LogUserSwapBalancesIxArgs = {
 
 export type AssertUserSwapBalancesIxArgs = {
   user: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  inputMintProgramId: PublicKey;
-  outputMintProgramId: PublicKey;
+  inputMint?: PublicKey;
+  outputMint?: PublicKey;
+  inputMintProgramId?: PublicKey;
+  outputMintProgramId?: PublicKey;
   maxInputAmountChange: BN;
   minOutputAmountChange: BN;
   inputTa?: PublicKey;
