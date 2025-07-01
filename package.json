@@ -6,7 +6,7 @@
   "module": "dist/index.js",
   "files": [
     "dist",
-    "src/**/*.ts"
+    "src/rpc_client/limo.json"
   ],
   "version": "1.0.15",
   "scripts": {
