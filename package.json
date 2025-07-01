@@ -8,7 +8,7 @@
     "dist",
     "src/rpc_client/limo.json"
   ],
-  "version": "1.0.15",
+  "version": "1.0.16",
   "scripts": {
     "build": "tsc",
     "build:test": "tsc --project ./tests/tsconfig.json",
