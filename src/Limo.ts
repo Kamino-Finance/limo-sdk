@@ -1,4 +1,4 @@
-import { AnchorProvider, Idl, Program, Provider } from "@coral-xyz/anchor";
+import { AnchorProvider, BorshInstructionCoder, Idl, Instruction, Program, Provider } from "@coral-xyz/anchor";
 import LIMO_IDL from "./rpc_client/limo.json";
 import BN from "bn.js";
 
@@ -67,6 +67,7 @@ import {
 } from "./rpc_client/instructions";
 import { logUserSwapBalancesEnd } from "./rpc_client/instructions";
 import * as anchor from "@coral-xyz/anchor";
+import { PROGRAM_ID } from "./rpc_client/programId";
 
 export const limoId = new PublicKey(
   "LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF",
@@ -82,8 +83,8 @@ export const MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX = 14;
 export class LimoClient {
   private readonly _connection: Connection;
   private readonly _provider: Provider;
-  private readonly _limoProgram: Program;
-  private readonly programId: PublicKey;
+  public readonly _limoProgram: Program;
+  public readonly programId: PublicKey;
   private globalConfigState: GlobalConfig | undefined;
   private _globalConfig: PublicKey;
 
@@ -3045,4 +3046,16 @@ export class LimoClient {
 
     return ixns;
   }
+}
+
+export function decodeLimoInstruction(
+  instructionData: Buffer,
+  programId?: PublicKey,
+): Instruction | null {
+  const limoProgram = new Program(LIMO_IDL as Idl, programId ? programId : PROGRAM_ID);
+
+  const coder = new BorshInstructionCoder(limoProgram.idl);
+  const decodedInstruction = coder.decode(instructionData);
+
+  return decodedInstruction;
 }
