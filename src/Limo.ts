@@ -2036,10 +2036,10 @@ export class LimoClient {
   /**
    * Get the create close order instruction
    * @param user - the user address
-   * @param inputMont - the inputMint for the swap
+   * @param inputMint - the inputMint for the swap
    * @param outputMint - the outputMint for the swap
-   * @param inputMintProgramId - the input mint program id
-   * @param outputMintProgramId - the output mint program id
+   * @param inputTa - the input mint token account
+   * @param outputTa - the output mint token account
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
   logUserSwapBalancesIxs(args: LogUserSwapBalancesIxArgs): {
@@ -2050,8 +2050,8 @@ export class LimoClient {
       user,
       inputMint,
       outputMint,
-      inputMintProgramId,
-      outputMintProgramId,
+      inputTa,
+      outputTa,
       swapProgarmId,
       simulatedSwapAmountOut,
       simulatedTs,
@@ -2063,26 +2063,14 @@ export class LimoClient {
       pdaReferrer = args.pdaReferrer ?? this.programId,
       voteAccount,
     } = args;
-    const inputMintAta = getAssociatedTokenAddressSync(
-      inputMint,
-      user,
-      true,
-      inputMintProgramId,
-    );
-    const outputMintAta = getAssociatedTokenAddressSync(
-      outputMint,
-      user,
-      true,
-      outputMintProgramId,
-    );
 
     const logIxStart = logUserSwapBalancesStart({
       baseAccounts: {
         maker: user,
         inputMint,
         outputMint,
-        inputTa: inputMintAta,
-        outputTa: outputMintAta,
+        inputTa,
+        outputTa,
         pdaReferrer,
         swapProgramId: swapProgarmId,
       },
@@ -2112,8 +2100,8 @@ export class LimoClient {
           maker: user,
           inputMint,
           outputMint,
-          inputTa: inputMintAta,
-          outputTa: outputMintAta,
+          inputTa,
+          outputTa,
           pdaReferrer,
           swapProgramId: swapProgarmId,
         },
@@ -2163,12 +2151,24 @@ export class LimoClient {
     swapProgarmId: PublicKey,
     voteAccount?: PublicKey,
   ): Promise<TransactionSignature> {
+    const inputTa = getAssociatedTokenAddressSync(
+      inputMint,
+      user.publicKey,
+      true,
+      inputMintProgramId,
+    );
+    const outputTa = getAssociatedTokenAddressSync(
+      outputMint,
+      user.publicKey,
+      true,
+      outputMintProgramId,
+    );
     const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs({
       user: user.publicKey,
       inputMint,
       outputMint,
-      inputMintProgramId,
-      outputMintProgramId,
+      inputTa,
+      outputTa,
       swapProgarmId,
       simulatedSwapAmountOut: new BN(0),
       simulatedTs: new BN(0),

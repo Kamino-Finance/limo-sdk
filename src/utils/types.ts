@@ -92,8 +92,8 @@ export type LogUserSwapBalancesIxArgs = {
   user: PublicKey;
   inputMint: PublicKey;
   outputMint: PublicKey;
-  inputMintProgramId: PublicKey;
-  outputMintProgramId: PublicKey;
+  inputTa: PublicKey;
+  outputTa: PublicKey;
   swapProgarmId: PublicKey;
   simulatedSwapAmountOut: BN;
   simulatedTs: BN;
