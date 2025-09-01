@@ -1,16 +1,27 @@
-import { PublicKey, Connection } from "@solana/web3.js";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  address,
+  Address,
+  fetchEncodedAccount,
+  fetchEncodedAccounts,
+  GetAccountInfoApi,
+  GetMultipleAccountsApi,
+  Rpc,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
 export interface OrderFields {
-  globalConfig: PublicKey;
-  maker: PublicKey;
-  inputMint: PublicKey;
-  inputMintProgramId: PublicKey;
-  outputMint: PublicKey;
-  outputMintProgramId: PublicKey;
+  globalConfig: Address;
+  maker: Address;
+  inputMint: Address;
+  inputMintProgramId: Address;
+  outputMint: Address;
+  outputMintProgramId: Address;
   /** The amount of input token the maker wants to swap */
   initialInputAmount: BN;
   /** The amount of output token the maker wants to receive */
@@ -44,7 +55,7 @@ export interface OrderFields {
    * between start and end balances in order to compute the amount received from a potential swap
    */
   flashStartTakerOutputBalance: BN;
-  counterparty: PublicKey;
+  counterparty: Address;
   padding: Array<BN>;
 }
 
@@ -93,12 +104,12 @@ export interface OrderJSON {
 }
 
 export class Order {
-  readonly globalConfig: PublicKey;
-  readonly maker: PublicKey;
-  readonly inputMint: PublicKey;
-  readonly inputMintProgramId: PublicKey;
-  readonly outputMint: PublicKey;
-  readonly outputMintProgramId: PublicKey;
+  readonly globalConfig: Address;
+  readonly maker: Address;
+  readonly inputMint: Address;
+  readonly inputMintProgramId: Address;
+  readonly outputMint: Address;
+  readonly outputMintProgramId: Address;
   /** The amount of input token the maker wants to swap */
   readonly initialInputAmount: BN;
   /** The amount of output token the maker wants to receive */
@@ -132,20 +143,20 @@ export class Order {
    * between start and end balances in order to compute the amount received from a potential swap
    */
   readonly flashStartTakerOutputBalance: BN;
-  readonly counterparty: PublicKey;
+  readonly counterparty: Address;
   readonly padding: Array<BN>;
 
   static readonly discriminator = Buffer.from([
     134, 173, 223, 185, 77, 86, 28, 51,
   ]);
 
-  static readonly layout = borsh.struct([
-    borsh.publicKey("globalConfig"),
-    borsh.publicKey("maker"),
-    borsh.publicKey("inputMint"),
-    borsh.publicKey("inputMintProgramId"),
-    borsh.publicKey("outputMint"),
-    borsh.publicKey("outputMintProgramId"),
+  static readonly layout = borsh.struct<Order>([
+    borshAddress("globalConfig"),
+    borshAddress("maker"),
+    borshAddress("inputMint"),
+    borshAddress("inputMintProgramId"),
+    borshAddress("outputMint"),
+    borshAddress("outputMintProgramId"),
     borsh.u64("initialInputAmount"),
     borsh.u64("expectedOutputAmount"),
     borsh.u64("remainingInputAmount"),
@@ -160,7 +171,7 @@ export class Order {
     borsh.array(borsh.u8(), 3, "padding0"),
     borsh.u64("lastUpdatedTimestamp"),
     borsh.u64("flashStartTakerOutputBalance"),
-    borsh.publicKey("counterparty"),
+    borshAddress("counterparty"),
     borsh.array(borsh.u64(), 15, "padding"),
   ]);
 
@@ -190,38 +201,42 @@ export class Order {
   }
 
   static async fetch(
-    c: Connection,
-    address: PublicKey,
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetAccountInfoApi>,
+    address: Address,
+    programId: Address = PROGRAM_ID,
   ): Promise<Order | null> {
-    const info = await c.getAccountInfo(address);
+    const info = await fetchEncodedAccount(rpc, address);
 
-    if (info === null) {
+    if (!info.exists) {
       return null;
     }
-    if (!info.owner.equals(programId)) {
-      throw new Error("account doesn't belong to this program");
+    if (info.programAddress !== programId) {
+      throw new Error(
+        `OrderFields account ${address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+      );
     }
 
-    return this.decode(info.data);
+    return this.decode(Buffer.from(info.data));
   }
 
   static async fetchMultiple(
-    c: Connection,
-    addresses: PublicKey[],
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetMultipleAccountsApi>,
+    addresses: Address[],
+    programId: Address = PROGRAM_ID,
   ): Promise<Array<Order | null>> {
-    const infos = await c.getMultipleAccountsInfo(addresses);
+    const infos = await fetchEncodedAccounts(rpc, addresses);
 
     return infos.map((info) => {
-      if (info === null) {
+      if (!info.exists) {
         return null;
       }
-      if (!info.owner.equals(programId)) {
-        throw new Error("account doesn't belong to this program");
+      if (info.programAddress !== programId) {
+        throw new Error(
+          `OrderFields account ${info.address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+        );
       }
 
-      return this.decode(info.data);
+      return this.decode(Buffer.from(info.data));
     });
   }
 
@@ -260,12 +275,12 @@ export class Order {
 
   toJSON(): OrderJSON {
     return {
-      globalConfig: this.globalConfig.toString(),
-      maker: this.maker.toString(),
-      inputMint: this.inputMint.toString(),
-      inputMintProgramId: this.inputMintProgramId.toString(),
-      outputMint: this.outputMint.toString(),
-      outputMintProgramId: this.outputMintProgramId.toString(),
+      globalConfig: this.globalConfig,
+      maker: this.maker,
+      inputMint: this.inputMint,
+      inputMintProgramId: this.inputMintProgramId,
+      outputMint: this.outputMint,
+      outputMintProgramId: this.outputMintProgramId,
       initialInputAmount: this.initialInputAmount.toString(),
       expectedOutputAmount: this.expectedOutputAmount.toString(),
       remainingInputAmount: this.remainingInputAmount.toString(),
@@ -281,19 +296,19 @@ export class Order {
       lastUpdatedTimestamp: this.lastUpdatedTimestamp.toString(),
       flashStartTakerOutputBalance:
         this.flashStartTakerOutputBalance.toString(),
-      counterparty: this.counterparty.toString(),
+      counterparty: this.counterparty,
       padding: this.padding.map((item) => item.toString()),
     };
   }
 
   static fromJSON(obj: OrderJSON): Order {
     return new Order({
-      globalConfig: new PublicKey(obj.globalConfig),
-      maker: new PublicKey(obj.maker),
-      inputMint: new PublicKey(obj.inputMint),
-      inputMintProgramId: new PublicKey(obj.inputMintProgramId),
-      outputMint: new PublicKey(obj.outputMint),
-      outputMintProgramId: new PublicKey(obj.outputMintProgramId),
+      globalConfig: address(obj.globalConfig),
+      maker: address(obj.maker),
+      inputMint: address(obj.inputMint),
+      inputMintProgramId: address(obj.inputMintProgramId),
+      outputMint: address(obj.outputMint),
+      outputMintProgramId: address(obj.outputMintProgramId),
       initialInputAmount: new BN(obj.initialInputAmount),
       expectedOutputAmount: new BN(obj.expectedOutputAmount),
       remainingInputAmount: new BN(obj.remainingInputAmount),
@@ -308,7 +323,7 @@ export class Order {
       padding0: obj.padding0,
       lastUpdatedTimestamp: new BN(obj.lastUpdatedTimestamp),
       flashStartTakerOutputBalance: new BN(obj.flashStartTakerOutputBalance),
-      counterparty: new PublicKey(obj.counterparty),
+      counterparty: address(obj.counterparty),
       padding: obj.padding.map((item) => new BN(item)),
     });
   }

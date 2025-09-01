@@ -1,12 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
+
+export const DISCRIMINATOR = Buffer.from([
+  141, 54, 37, 207, 237, 210, 250, 215,
+]);
 
 export interface CreateOrderArgs {
   inputAmount: BN;
@@ -15,22 +26,22 @@ export interface CreateOrderArgs {
 }
 
 export interface CreateOrderAccounts {
-  maker: PublicKey;
-  globalConfig: PublicKey;
-  pdaAuthority: PublicKey;
-  order: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  makerAta: PublicKey;
-  inputVault: PublicKey;
-  inputTokenProgram: PublicKey;
-  outputTokenProgram: PublicKey;
-  systemProgram: PublicKey;
-  eventAuthority: PublicKey;
-  program: PublicKey;
+  maker: TransactionSigner;
+  globalConfig: Address;
+  pdaAuthority: Address;
+  order: Address;
+  inputMint: Address;
+  outputMint: Address;
+  makerAta: Address;
+  inputVault: Address;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
+  systemProgram: Address;
+  eventAuthority: Address;
+  program: Address;
 }
 
-export const layout = borsh.struct([
+export const layout = borsh.struct<CreateOrderArgs>([
   borsh.u64("inputAmount"),
   borsh.u64("outputAmount"),
   borsh.u8("orderType"),
@@ -39,24 +50,25 @@ export const layout = borsh.struct([
 export function createOrder(
   args: CreateOrderArgs,
   accounts: CreateOrderAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.maker, isSigner: true, isWritable: true },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
-    { pubkey: accounts.pdaAuthority, isSigner: false, isWritable: false },
-    { pubkey: accounts.order, isSigner: false, isWritable: true },
-    { pubkey: accounts.inputMint, isSigner: false, isWritable: false },
-    { pubkey: accounts.outputMint, isSigner: false, isWritable: false },
-    { pubkey: accounts.makerAta, isSigner: false, isWritable: true },
-    { pubkey: accounts.inputVault, isSigner: false, isWritable: true },
-    { pubkey: accounts.inputTokenProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.outputTokenProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.eventAuthority, isSigner: false, isWritable: false },
-    { pubkey: accounts.program, isSigner: false, isWritable: false },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
+    { address: accounts.maker.address, role: 3, signer: accounts.maker },
+    { address: accounts.globalConfig, role: 1 },
+    { address: accounts.pdaAuthority, role: 0 },
+    { address: accounts.order, role: 1 },
+    { address: accounts.inputMint, role: 0 },
+    { address: accounts.outputMint, role: 0 },
+    { address: accounts.makerAta, role: 1 },
+    { address: accounts.inputVault, role: 1 },
+    { address: accounts.inputTokenProgram, role: 0 },
+    { address: accounts.outputTokenProgram, role: 0 },
+    { address: accounts.systemProgram, role: 0 },
+    { address: accounts.eventAuthority, role: 0 },
+    { address: accounts.program, role: 0 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([141, 54, 37, 207, 237, 210, 250, 215]);
   const buffer = Buffer.alloc(1000);
   const len = layout.encode(
     {
@@ -66,7 +78,7 @@ export function createOrder(
     },
     buffer,
   );
-  const data = Buffer.concat([identifier, buffer]).slice(0, 8 + len);
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = Buffer.concat([DISCRIMINATOR, buffer]).slice(0, 8 + len);
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

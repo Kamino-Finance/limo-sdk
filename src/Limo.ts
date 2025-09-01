@@ -1,116 +1,121 @@
-import {
-  AnchorProvider,
-  BorshInstructionCoder,
-  Idl,
-  Instruction,
-  Program,
-  Provider,
-} from "@coral-xyz/anchor";
-import LIMO_IDL from "./rpc_client/limo.json";
 import BN from "bn.js";
 
 import {
-  Connection,
-  Context,
-  GetProgramAccountsFilter,
-  KeyedAccountInfo,
-  PublicKey,
-  sendAndConfirmTransaction,
-  Signer,
-  SystemProgram,
-  SYSVAR_RENT_PUBKEY,
-  Transaction,
-  TransactionInstruction,
-  TransactionSignature,
-} from "@solana/web3.js";
-import {
-  getReadOnlyWallet,
-  getPdaAuthority,
+  amountToLamportsBN,
+  asOption,
+  AssertUserSwapBalancesIxArgs,
+  checkIfAccountExists,
+  createAddExtraComputeUnitFeeTransaction,
+  createAtaIdempotent,
   createKeypairRentExemptIxSync,
-  getTokenVaultPDA,
-  printSimulateTx,
-  printMultisigTx,
-  OrderStateAndAddress,
-  OrderDisplay,
-  getMintDecimals,
-  PubkeyHashMap,
-  withdrawHostTipIx,
+  CreateOrderWithParamsArgs,
+  DEFAULT_ADDRESS,
+  divCeil,
   FilledOrder,
   FlashTakeOrderIxs,
-  createAtaIdempotent,
-  OrderListenerCallbackOnChange,
-  createAddExtraComputeUnitFeeTransaction,
-  getIntermediaryTokenAccountPDA,
-  lamportsToAmountDecimal,
-  amountToLamportsBN,
-  lamportsToAmountBN,
-  divCeil,
-  checkIfAccountExists,
   getEventAuthorityPDA,
-  getUserSwapBalanceStatePDA,
-  LogUserSwapBalancesIxArgs,
-  CreateOrderWithParamsArgs,
-  AssertUserSwapBalancesIxArgs,
+  getIntermediaryTokenAccountPDA,
+  getMintDecimals,
+  getPdaAuthority,
+  getTokenVaultPDA,
   getUserSwapBalanceAssertStatePDA,
+  getUserSwapBalanceStatePDA,
+  lamportsToAmountBN,
+  lamportsToAmountDecimal,
+  LogUserSwapBalancesIxArgs,
+  OrderDisplay,
+  OrderListenerCallbackOnChange,
+  OrderStateAndAddress,
+  printMultisigTx,
+  printSimulateTx,
+  SolanaKitFilter,
+  withdrawHostTipIx,
 } from "./utils";
 
 import * as limoOperations from "./utils/operations";
-import { Keypair } from "@solana/web3.js";
-import { GlobalConfig } from "./rpc_client/accounts/GlobalConfig";
+import { GlobalConfig, Order } from "./rpc_client/accounts";
 import Decimal from "decimal.js";
-import { Order } from "./rpc_client/accounts/Order";
 import { UpdateGlobalConfigMode, UpdateOrderMode } from "./rpc_client/types";
-import {
-  getAssociatedTokenAddressSync,
-  NATIVE_MINT,
-  TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
-import { createCloseAccountInstruction } from "@solana/spl-token";
 import base58 from "bs58";
 import {
   assertUserSwapBalancesEnd,
   assertUserSwapBalancesStart,
+  logUserSwapBalancesEnd,
   logUserSwapBalancesStart,
 } from "./rpc_client/instructions";
-import { logUserSwapBalancesEnd } from "./rpc_client/instructions";
-import * as anchor from "@coral-xyz/anchor";
-import { PROGRAM_ID } from "./rpc_client/programId";
+import {
+  AccountRole,
+  Address,
+  address,
+  appendTransactionMessageInstructions,
+  createTransactionMessage,
+  getAddressEncoder,
+  getSignatureFromTransaction,
+  Instruction,
+  pipe,
+  Rpc,
+  RpcSubscriptions,
+  sendAndConfirmTransactionFactory,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  signTransactionMessageWithSigners,
+  SolanaRpcApi,
+  SolanaRpcSubscriptionsApi,
+  TransactionSigner,
+} from "@solana/kit";
+import { Base58EncodedBytes } from "@solana/kit/dist/types";
+import {
+  AccountInfoBase,
+  AccountInfoWithBase64EncodedData,
+  AccountInfoWithPubkey,
+} from "@solana/rpc-types/dist/types/account-info";
+import type { Slot } from "@solana/rpc-types/dist/types/typed-numbers";
+import {
+  addSignersToTransactionMessage,
+  generateKeyPairSigner,
+} from "@solana/signers";
+import {
+  findAssociatedTokenPda,
+  getCloseAccountInstruction,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
+import { AccountMeta } from "@solana/instructions/dist/types/accounts";
+import {
+  getTransferSolInstruction,
+  SYSTEM_PROGRAM_ADDRESS,
+} from "@solana-program/system";
+import {
+  SYSVAR_INSTRUCTIONS_ADDRESS,
+  SYSVAR_RENT_ADDRESS,
+} from "@solana/sysvars";
 
-export const limoId = new PublicKey(
-  "LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF",
-);
+export const limoId = address("LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF");
 
-export const WRAPPED_SOL_MINT = new PublicKey(
+export const WRAPPED_SOL_MINT = address(
   "So11111111111111111111111111111111111111112",
 );
 
-export const ORDER_RENT_EXEMPTION_LAMPORTS = 3841920;
+export const ORDER_RENT_EXEMPTION_LAMPORTS = BigInt(3841920);
 export const MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX = 14;
 
 export class LimoClient {
-  private readonly _connection: Connection;
-  private readonly _provider: Provider;
-  public readonly _limoProgram: Program;
-  public readonly programId: PublicKey;
+  private readonly _connection: Rpc<SolanaRpcApi>;
+  private readonly _subscription: RpcSubscriptions<SolanaRpcSubscriptionsApi>;
+  public readonly programAddress: Address;
   private globalConfigState: GlobalConfig | undefined;
-  private _globalConfig: PublicKey;
+  private _globalConfig: Address;
 
   constructor(
-    connection: Connection,
-    globalConfig: PublicKey | undefined,
+    connection: Rpc<SolanaRpcApi>,
+    subscription: RpcSubscriptions<SolanaRpcSubscriptionsApi>,
+    globalConfig: Address | undefined,
     globalConfigState?: GlobalConfig,
   ) {
     this._connection = connection;
-    this._globalConfig = globalConfig ?? PublicKey.default;
-    this._provider = new AnchorProvider(connection, getReadOnlyWallet(), {
-      commitment: connection.commitment,
-    });
-    this.programId = limoId;
-    this._limoProgram = new Program(
-      LIMO_IDL as Idl,
-      this.programId,
-      this._provider,
-    );
+    this._subscription = subscription;
+    this._globalConfig = globalConfig ?? DEFAULT_ADDRESS;
+    this.programAddress = limoId;
+
     this.globalConfigState = globalConfigState;
   }
 
@@ -118,19 +123,19 @@ export class LimoClient {
     return this._connection;
   }
 
-  getProgramID() {
-    return this.programId;
+  getSubscription() {
+    return this._subscription;
   }
 
-  getProgram() {
-    return this._limoProgram;
+  getProgramID() {
+    return this.programAddress;
   }
 
   /**
    * Sets the global config address
    * @param globalConfig - the global config address
    */
-  setGlobalConfig(globalConfig: PublicKey) {
+  setGlobalConfig(globalConfig: Address) {
     this._globalConfig = globalConfig;
   }
 
@@ -199,11 +204,11 @@ export class LimoClient {
    * @param orderAddress - the order address
    * @returns the order state
    */
-  async getOrderState(orderAddress: PublicKey): Promise<Order> {
+  async getOrderState(orderAddress: Address): Promise<Order> {
     const order = await Order.fetch(
       this._connection,
       orderAddress,
-      this.programId,
+      this.programAddress,
     );
 
     if (!order) {
@@ -221,39 +226,41 @@ export class LimoClient {
    * @returns list of order states and addresses
    */
   async getAllOrdersStateAndAddressWithFilters(
-    filters: GetProgramAccountsFilter[],
-    globalConfigOverride?: PublicKey,
+    filters: SolanaKitFilter[],
+    globalConfigOverride?: Address,
     filterByGlobalConfig: boolean = true,
   ): Promise<OrderStateAndAddress[]> {
     if (filterByGlobalConfig) {
       filters.push({
         memcmp: {
-          bytes: globalConfigOverride
-            ? globalConfigOverride.toBase58()
-            : this._globalConfig.toBase58(),
-          offset: 8,
+          bytes: (globalConfigOverride
+            ? globalConfigOverride.toString()
+            : this._globalConfig.toString()) as Base58EncodedBytes,
+          encoding: "base58" as const,
+          offset: BigInt(8),
         },
       });
     }
     filters.push({
-      dataSize: Order.layout.span + 8,
+      dataSize: BigInt(Order.layout.span + 8),
     });
-    const orderProgramAccounts = await this._connection.getProgramAccounts(
-      this.programId,
-      {
+    const orderProgramAccounts = await this._connection
+      .getProgramAccounts(this.programAddress, {
         filters,
-      },
-    );
+        encoding: "base64",
+      })
+      .send();
 
     return orderProgramAccounts.map((orderProgramAccount) => {
       if (orderProgramAccount.account === null) {
         throw new Error("Invalid account");
       }
-      if (!orderProgramAccount.account.owner.equals(this.programId)) {
+      if (orderProgramAccount.account.owner !== this.programAddress) {
         throw new Error("account doesn't belong to this program");
       }
 
-      const order = Order.decode(orderProgramAccount.account.data);
+      const buffer = Buffer.from(orderProgramAccount.account.data[0], "base64");
+      const order = Order.decode(buffer);
 
       if (!order) {
         throw Error("Could not parse obligation.");
@@ -273,7 +280,7 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersStateAndAddressForGlobalConfig(
-    globalConfigOverride?: PublicKey,
+    globalConfigOverride?: Address,
   ): Promise<OrderStateAndAddress[]> {
     return this.getAllOrdersStateAndAddressWithFilters(
       [],
@@ -290,8 +297,8 @@ export class LimoClient {
    * @throws error if mint decimals not found for mint
    */
   async getAllOrdersDisplayForGlobalConfig(
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
     const ordersAndStates = await this.getAllOrdersStateAndAddressWithFilters(
       [],
@@ -310,14 +317,15 @@ export class LimoClient {
    * @throws error if mint decimals not found for mint
    */
   async getAllOrdersStateAndAddressForMaker(
-    maker: PublicKey,
-    globalConfigOverride?: PublicKey,
+    maker: Address,
+    globalConfigOverride?: Address,
   ): Promise<OrderStateAndAddress[]> {
-    const filters: GetProgramAccountsFilter[] = [
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: maker.toBase58(),
-          offset: 40,
+          bytes: maker.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(40),
         },
       },
     ];
@@ -338,16 +346,16 @@ export class LimoClient {
    * @throws error if mint decimals not found for mint
    */
   async getAllOrdersDisplayForMaker(
-    maker: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    maker: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
     const ordersAndStates = await this.getAllOrdersStateAndAddressForMaker(
       maker,
       globalConfigOverride,
     );
 
-    const mints: PublicKey[] = [];
+    const mints: Address[] = [];
     for (const order of ordersAndStates) {
       mints.push(order.state.inputMint);
       mints.push(order.state.outputMint);
@@ -367,14 +375,15 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersStateAndAddressForInputMint(
-    inputMint: PublicKey,
-    globalConfigOverride?: PublicKey,
+    inputMint: Address,
+    globalConfigOverride?: Address,
   ): Promise<OrderStateAndAddress[]> {
-    const filters: GetProgramAccountsFilter[] = [
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: inputMint.toBase58(),
-          offset: 72,
+          bytes: inputMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
         },
       },
     ];
@@ -394,9 +403,9 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersDisplayForInputMint(
-    inputMint: PublicKey,
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    inputMint: Address,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
     const ordersAndStates = await this.getAllOrdersStateAndAddressForInputMint(
       inputMint,
@@ -414,14 +423,15 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersStateAndAddressForOutputMint(
-    outputMint: PublicKey,
-    globalConfigOverride?: PublicKey,
+    outputMint: Address,
+    globalConfigOverride?: Address,
   ): Promise<OrderStateAndAddress[]> {
-    const filters: GetProgramAccountsFilter[] = [
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: outputMint.toBase58(),
-          offset: 136,
+          bytes: outputMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
@@ -441,9 +451,9 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersDisplayForOutputMint(
-    outputMint: PublicKey,
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    outputMint: Address,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
     const ordersAndStates = await this.getAllOrdersStateAndAddressForOutputMint(
       outputMint,
@@ -462,22 +472,24 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getAllOrdersDisplayForInputAndOutputMints(
-    inputMint: PublicKey,
-    outputMint: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    inputMint: Address,
+    outputMint: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
-    const filters: GetProgramAccountsFilter[] = [
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: inputMint.toBase58(),
-          offset: 72,
+          bytes: inputMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
         },
       },
       {
         memcmp: {
-          bytes: outputMint.toBase58(),
-          offset: 136,
+          bytes: outputMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
@@ -488,7 +500,7 @@ export class LimoClient {
         globalConfigOverride,
       );
 
-    let mintDecimalsMap = new PubkeyHashMap<PublicKey, number>();
+    let mintDecimalsMap = new Map<Address, number>();
 
     if (!mintDecimals) {
       const inputMintDecimals = await getMintDecimals(
@@ -521,32 +533,35 @@ export class LimoClient {
    * @throws error if mint decimals not found for mint
    */
   async getAllOrdersDisplayForMakerInputAndOutputMints(
-    maker: PublicKey,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    maker: Address,
+    inputMint: Address,
+    outputMint: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<OrderDisplay[]> {
     // Global config filter is always happening in getAllOrdersStateAndAddressWithFilters
     // but max of 4 filters are allowed so we merge maker and inputMint as they are
     // consecutive pubkeys in the order account maker at byte 40 and input mint at byte 72
+    const addressEncoder = getAddressEncoder();
 
     const mergedMakerInputMint = Buffer.concat([
-      new Uint8Array(maker.toBuffer()),
-      new Uint8Array(inputMint.toBuffer()),
+      new Uint8Array(Buffer.from(addressEncoder.encode(maker))),
+      new Uint8Array(Buffer.from(addressEncoder.encode(inputMint))),
     ]);
 
-    const filters: GetProgramAccountsFilter[] = [
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: base58.encode(mergedMakerInputMint),
-          offset: 40,
+          bytes: base58.encode(mergedMakerInputMint) as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(40),
         },
       },
       {
         memcmp: {
-          bytes: outputMint.toBase58(),
-          offset: 136,
+          bytes: outputMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
@@ -557,7 +572,7 @@ export class LimoClient {
         globalConfigOverride,
       );
 
-    let mintDecimalsMap = new PubkeyHashMap<PublicKey, number>();
+    let mintDecimalsMap = new Map<Address, number>();
 
     if (mintDecimals) {
       const inputMintDecimals = await getMintDecimals(
@@ -576,11 +591,11 @@ export class LimoClient {
     return this.toOrdersDisplay(ordersStateAndAddresses, mintDecimalsMap);
   }
 
-  async getOrderDisplay(orderAddress: PublicKey): Promise<OrderDisplay> {
+  async getOrderDisplay(orderAddress: Address): Promise<OrderDisplay> {
     const order = await Order.fetch(
       this._connection,
       orderAddress,
-      this.programId,
+      this.programAddress,
     );
 
     if (!order) {
@@ -596,7 +611,7 @@ export class LimoClient {
       order.outputMint,
     );
 
-    const mintDecimalsMap = new PubkeyHashMap<PublicKey, number>();
+    const mintDecimalsMap = new Map<Address, number>();
 
     mintDecimalsMap.set(order.inputMint, inputMintDecimals);
     mintDecimalsMap.set(order.outputMint, outputMintDecimals);
@@ -616,7 +631,7 @@ export class LimoClient {
    */
   toOrdersDisplay(
     orders: OrderStateAndAddress[],
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
+    mintDecimals: Map<Address, number>,
   ): OrderDisplay[] {
     const ordersDisplay: OrderDisplay[] = [];
     for (const order of orders) {
@@ -624,14 +639,14 @@ export class LimoClient {
       if (!inputMintDecimals) {
         throw new Error(
           "Mint decimals not found for mint + " +
-            order.state.inputMint.toBase58(),
+            order.state.inputMint.toString(),
         );
       }
       const outputMintDecimals = mintDecimals.get(order.state.outputMint);
       if (!outputMintDecimals) {
         throw new Error(
           "Mint decimals not found for mint + " +
-            order.state.outputMint.toBase58(),
+            order.state.outputMint.toString(),
         );
       }
       const initialInputAmountDecimal = new Decimal(
@@ -698,10 +713,10 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getOrdersDisplayForBaseAndQuote(
-    baseTokenMint: PublicKey,
-    quoteTokenMint: PublicKey,
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    baseTokenMint: Address,
+    quoteTokenMint: Address,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<{ askOrders: OrderDisplay[]; bidOrders: OrderDisplay[] }> {
     const bidOrders = await this.getAllOrdersDisplayForInputAndOutputMints(
       baseTokenMint,
@@ -734,11 +749,11 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getOrdersDisplayForBaseAndQuoteAndMaker(
-    maker: PublicKey,
-    baseTokenMint: PublicKey,
-    quoteTokenMint: PublicKey,
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    maker: Address,
+    baseTokenMint: Address,
+    quoteTokenMint: Address,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<{ askOrders: OrderDisplay[]; bidOrders: OrderDisplay[] }> {
     const bidOrders = await this.getAllOrdersDisplayForMakerInputAndOutputMints(
       maker,
@@ -772,10 +787,10 @@ export class LimoClient {
    * @throws error if global config not set
    */
   async getLatestFilledOrders(
-    baseTokenMint: PublicKey,
-    quoteTokenMint: PublicKey,
-    mintDecimals: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
+    baseTokenMint: Address,
+    quoteTokenMint: Address,
+    mintDecimals: Map<Address, number>,
+    globalConfigOverride?: Address,
   ): Promise<{
     filledOrdersBuy: FilledOrder[];
     filledOrdersSell: FilledOrder[];
@@ -840,25 +855,26 @@ export class LimoClient {
    * @param callbackOnChange - callback to be called when an order changes
    * @returns subscriptionId - a number of the subscription id, to be used to stop the listener
    */
-  listenToMakerOrders(
-    maker: PublicKey,
+  async listenToMakerOrders(
+    maker: Address,
     callbackOnChange: OrderListenerCallbackOnChange,
-  ): number {
-    const filters: GetProgramAccountsFilter[] = [
+  ): Promise<AbortController> {
+    const filters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: maker.toBase58(),
-          offset: 40,
+          bytes: maker.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(40),
         },
       },
     ];
 
-    const subscriptionId = this.listenToOrdersChangeWithFilters(
+    const abortController = await this.listenToOrdersChangeWithFilters(
       filters,
       callbackOnChange,
     );
 
-    return subscriptionId;
+    return abortController;
   }
 
   /**
@@ -869,52 +885,60 @@ export class LimoClient {
    * @param callbackOnChangeBuyOrders - callback to be called when a buy order changes
    * @returns { subscriptionIdSellOrders, subscriptionIdBuyOrders } - the subscription id for the two listeners (both should be closed when subscription no longer needed)
    */
-  listenToOrderChangeForBaseAndQuote(
-    baseTokenMint: PublicKey,
-    quoteTokenMint: PublicKey,
+  async listenToOrderChangeForBaseAndQuote(
+    baseTokenMint: Address,
+    quoteTokenMint: Address,
     callbackOnChangeSellOrders: OrderListenerCallbackOnChange,
     callbackOnChangeBuyOrders: OrderListenerCallbackOnChange,
-  ): { subscriptionIdSellOrders: number; subscriptionIdBuyOrders: number } {
-    const buyFilters: GetProgramAccountsFilter[] = [
+  ): Promise<{
+    abortControllerSellOrders: AbortController;
+    abortControllerBuyOrders: AbortController;
+  }> {
+    const buyFilters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: baseTokenMint.toBase58(),
-          offset: 72,
+          bytes: baseTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
         },
       },
       {
         memcmp: {
-          bytes: quoteTokenMint.toBase58(),
-          offset: 136,
-        },
-      },
-    ];
-
-    const sellFilters: GetProgramAccountsFilter[] = [
-      {
-        memcmp: {
-          bytes: quoteTokenMint.toBase58(),
-          offset: 72,
-        },
-      },
-      {
-        memcmp: {
-          bytes: baseTokenMint.toBase58(),
-          offset: 136,
+          bytes: quoteTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
 
-    const subscriptionIdSellOrders = this.listenToOrdersChangeWithFilters(
-      sellFilters,
-      callbackOnChangeSellOrders,
-    );
-    const subscriptionIdBuyOrders = this.listenToOrdersChangeWithFilters(
+    const sellFilters: SolanaKitFilter[] = [
+      {
+        memcmp: {
+          bytes: quoteTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
+        },
+      },
+      {
+        memcmp: {
+          bytes: baseTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
+        },
+      },
+    ];
+
+    const abortControllerSellOrders =
+      await this.listenToOrdersChangeWithFilters(
+        sellFilters,
+        callbackOnChangeSellOrders,
+      );
+    const abortControllerBuyOrders = await this.listenToOrdersChangeWithFilters(
       buyFilters,
       callbackOnChangeBuyOrders,
     );
 
-    return { subscriptionIdSellOrders, subscriptionIdBuyOrders };
+    return { abortControllerSellOrders, abortControllerBuyOrders };
   }
 
   /**
@@ -925,45 +949,52 @@ export class LimoClient {
    * @param callbackOnChangeBuyOrders - callback to be called when a buy order changes
    * @returns { subscriptionIdSellOrders, subscriptionIdBuyOrders } - the subscription id for the two listeners (both should be closed when subscription no longer needed)
    */
-  listenToOrderFillChangeForBaseAndQuote(
-    baseTokenMint: PublicKey,
-    quoteTokenMint: PublicKey,
+  async listenToOrderFillChangeForBaseAndQuote(
+    baseTokenMint: Address,
+    quoteTokenMint: Address,
     callbackOnChangeSellOrders: OrderListenerCallbackOnChange,
     callbackOnChangeBuyOrders: OrderListenerCallbackOnChange,
-  ): { subscriptionIdSellOrders: number; subscriptionIdBuyOrders: number } {
-    const buyFilters: GetProgramAccountsFilter[] = [
+  ): Promise<{
+    abortControllerSellOrders: AbortController;
+    abortControllerBuyOrders: AbortController;
+  }> {
+    const buyFilters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: baseTokenMint.toBase58(),
-          offset: 72,
+          bytes: baseTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
         },
       },
       {
         memcmp: {
-          bytes: quoteTokenMint.toBase58(),
-          offset: 136,
+          bytes: quoteTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
 
-    const sellFilters: GetProgramAccountsFilter[] = [
+    const sellFilters: SolanaKitFilter[] = [
       {
         memcmp: {
-          bytes: quoteTokenMint.toBase58(),
-          offset: 72,
+          bytes: quoteTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(72),
         },
       },
       {
         memcmp: {
-          bytes: baseTokenMint.toBase58(),
-          offset: 136,
+          bytes: baseTokenMint.toString() as Base58EncodedBytes,
+          encoding: "base58",
+          offset: BigInt(136),
         },
       },
     ];
 
     const callbackOnChangeSellOrdersFilledOrdersOnly = (
       orderStateAndAddress: OrderStateAndAddress,
-      slot: number,
+      slot: Slot,
     ) => {
       if (
         orderStateAndAddress.state.remainingInputAmount.toNumber() <
@@ -975,7 +1006,7 @@ export class LimoClient {
 
     const callbackOnChangeBuyOrdersFilledOrdersOnly = (
       orderStateAndAddress: OrderStateAndAddress,
-      slot: number,
+      slot: Slot,
     ) => {
       if (
         orderStateAndAddress.state.remainingInputAmount.toNumber() <
@@ -985,16 +1016,17 @@ export class LimoClient {
       }
     };
 
-    const subscriptionIdSellOrders = this.listenToOrdersChangeWithFilters(
-      sellFilters,
-      callbackOnChangeSellOrdersFilledOrdersOnly,
-    );
-    const subscriptionIdBuyOrders = this.listenToOrdersChangeWithFilters(
+    const abortControllerSellOrders =
+      await this.listenToOrdersChangeWithFilters(
+        sellFilters,
+        callbackOnChangeSellOrdersFilledOrdersOnly,
+      );
+    const abortControllerBuyOrders = await this.listenToOrdersChangeWithFilters(
       buyFilters,
       callbackOnChangeBuyOrdersFilledOrdersOnly,
     );
 
-    return { subscriptionIdSellOrders, subscriptionIdBuyOrders };
+    return { abortControllerSellOrders, abortControllerBuyOrders };
   }
 
   /**
@@ -1003,32 +1035,38 @@ export class LimoClient {
    * @param callbackOnChange - callback to be called when an order changes
    * @returns subscriptionId - a number of the subscription id, to be used to stop the listener
    */
-  listenToOrdersChangeWithFilters(
-    filters: GetProgramAccountsFilter[],
+  async listenToOrdersChangeWithFilters(
+    filters: SolanaKitFilter[],
     callbackOnChange: OrderListenerCallbackOnChange,
-  ): number {
+  ): Promise<AbortController> {
     filters.push({
       memcmp: {
-        bytes: this._globalConfig.toBase58(),
-        offset: 8,
+        bytes: this._globalConfig.toString() as Base58EncodedBytes,
+        encoding: "base58",
+        offset: BigInt(8),
       },
     });
     filters.push({
-      dataSize: Order.layout.span + 8,
+      dataSize: BigInt(Order.layout.span + 8),
     });
 
     const callbackOnChangeWtihDecoding = async (
-      keyedAccountInfo: KeyedAccountInfo,
-      context: Context,
+      keyedAccountInfo: AccountInfoWithPubkey<
+        AccountInfoBase & AccountInfoWithBase64EncodedData
+      >,
+      context: {
+        slot: Slot;
+      },
     ) => {
-      if (keyedAccountInfo.accountInfo === null) {
+      if (keyedAccountInfo.account === null) {
         throw new Error("Invalid account");
       }
-      if (!keyedAccountInfo.accountInfo.owner.equals(this.programId)) {
+      if (keyedAccountInfo.account.owner !== this.programAddress) {
         throw new Error("account doesn't belong to this program");
       }
 
-      const order = Order.decode(keyedAccountInfo.accountInfo.data);
+      const [base64Data, encoding] = keyedAccountInfo.account.data;
+      const order = Order.decode(Buffer.from(base64Data, encoding));
 
       if (!order) {
         throw Error("Could not parse obligation.");
@@ -1037,27 +1075,36 @@ export class LimoClient {
       callbackOnChange(
         {
           state: order,
-          address: keyedAccountInfo.accountId,
+          address: keyedAccountInfo.pubkey,
         },
         context.slot,
       );
     };
+    const abortController = new AbortController();
 
-    const subscriptionId = this._connection.onProgramAccountChange(
-      this.programId,
-      callbackOnChangeWtihDecoding,
-      { commitment: "confirmed", encoding: "base64", filters },
-    );
+    const subscriptionId = await this._subscription
+      .programNotifications(this.programAddress, {
+        commitment: "confirmed",
+        encoding: "base64",
+        filters,
+      })
+      .subscribe({ abortSignal: abortController.signal });
 
-    return subscriptionId;
+    (async () => {
+      for await (const notification of subscriptionId) {
+        callbackOnChangeWtihDecoding(notification.value, notification.context);
+      }
+    })();
+
+    return abortController;
   }
 
   /**
-   * Stops listening to order changes based on the subscription id
-   * @param subscriptionId - the subscription id to stop listening to
+   * Stops listening to order changes based on the abort controller
+   * @param abortController
    */
-  stopListeningToOrdersChange(subscriptionId: number) {
-    this._connection.removeProgramAccountChangeListener(subscriptionId);
+  stopListeningToOrdersChange(abortController: AbortController) {
+    abortController.abort();
   }
 
   /**
@@ -1067,36 +1114,38 @@ export class LimoClient {
    * @returns the create global config instruction
    */
   async createGlobalConfigIxs(
-    admin: PublicKey,
-    globalConfig: Keypair,
-  ): Promise<TransactionInstruction[]> {
-    let ixs: TransactionInstruction[] = [];
+    admin: TransactionSigner,
+    globalConfig: TransactionSigner,
+  ): Promise<Instruction[]> {
+    let ixs: Instruction[] = [];
 
-    const globalConfigSize = GlobalConfig.layout.getSpan() + 8;
+    const globalConfigSize = GlobalConfig.layout.span + 8;
+
+    const lamports = await this._connection
+      .getMinimumBalanceForRentExemption(BigInt(globalConfigSize))
+      .send();
 
     ixs.push(
       createKeypairRentExemptIxSync(
         admin,
         globalConfig,
         globalConfigSize,
-        await this._connection.getMinimumBalanceForRentExemption(
-          globalConfigSize,
-        ),
-        this.programId,
+        lamports.valueOf(),
+        this.programAddress,
       ),
     );
 
-    const pdaAuthority = getPdaAuthority(
-      this.programId,
-      globalConfig.publicKey,
+    const pdaAuthority = await getPdaAuthority(
+      this.programAddress,
+      globalConfig.address,
     );
 
     ixs.push(
       limoOperations.initializeGlobalConfig(
         admin,
-        globalConfig.publicKey,
+        globalConfig.address,
         pdaAuthority,
-        this.programId,
+        this.programAddress,
       ),
     );
 
@@ -1110,10 +1159,10 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async createGlobalConfig(
-    admin: Keypair,
-    globalConfig: Keypair,
-  ): Promise<TransactionSignature> {
-    const ix = await this.createGlobalConfigIxs(admin.publicKey, globalConfig);
+    admin: TransactionSigner,
+    globalConfig: TransactionSigner,
+  ): Promise<string> {
+    const ix = await this.createGlobalConfigIxs(admin, globalConfig);
     const sig = await this.executeTransaction(ix, admin, [globalConfig]);
 
     if (process.env.DEBUG === "true") {
@@ -1132,10 +1181,10 @@ export class LimoClient {
    * @returns the create initialize vault instruction
    */
   async initializeVaultIx(
-    user: PublicKey,
-    mint: PublicKey,
-    mintTokenProgramId?: PublicKey,
-  ): Promise<TransactionInstruction> {
+    user: TransactionSigner,
+    mint: Address,
+    mintTokenProgramId?: Address,
+  ): Promise<Instruction> {
     const mintProgramId = mintTokenProgramId
       ? mintTokenProgramId
       : (await this.getMintsProgramOwners([mint]))[0];
@@ -1146,7 +1195,7 @@ export class LimoClient {
       user,
       this._globalConfig,
       mint,
-      this.programId,
+      this.programAddress,
       mintProgramId,
     );
   }
@@ -1161,17 +1210,17 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async initializeVault(
-    user: Keypair,
-    mint: PublicKey,
+    user: TransactionSigner,
+    mint: Address,
     mode: string = "execute",
-    mintTokenProgramId?: PublicKey,
-  ): Promise<TransactionSignature> {
-    const ix = await this.initializeVaultIx(
-      user.publicKey,
+    mintTokenProgramId?: Address,
+  ): Promise<string> {
+    const ix = await this.initializeVaultIx(user, mint, mintTokenProgramId);
+    const vault = getTokenVaultPDA(
+      this.programAddress,
+      this._globalConfig,
       mint,
-      mintTokenProgramId,
     );
-    const vault = getTokenVaultPDA(this.programId, this._globalConfig, mint);
 
     const log = "Initialize Vault: " + vault.toString();
     return this.processTxn(user, [ix], mode, log, []);
@@ -1191,26 +1240,30 @@ export class LimoClient {
    * @throws error if mint decimals not found for mint
    */
   async createOrderGenericIx(
-    user: PublicKey,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    globalConfigOverride?: PublicKey,
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    globalConfigOverride?: Address,
     wrapUnwrapSol: boolean = true,
     withInitVault?: boolean,
-  ): Promise<[TransactionInstruction[], Keypair]> {
+  ): Promise<[Instruction[], TransactionSigner]> {
     let initVault: boolean;
     if (withInitVault === undefined) {
       try {
-        const vaultPda = getTokenVaultPDA(
-          this.programId,
+        const vaultPda = await getTokenVaultPDA(
+          this.programAddress,
           this._globalConfig,
           inputMint,
         );
-        initVault = !(await checkIfAccountExists(this._connection, vaultPda));
+        const accountExists = await checkIfAccountExists(
+          this._connection,
+          vaultPda,
+        );
+        initVault = !accountExists;
       } catch (error) {
         initVault = false;
       }
@@ -1218,7 +1271,7 @@ export class LimoClient {
       initVault = withInitVault;
     }
 
-    const order = Keypair.generate();
+    const order = await generateKeyPairSigner();
     const orderParams: limoOperations.OrderParams = {
       side: "bid",
       quoteTokenMint: outputMint,
@@ -1227,15 +1280,15 @@ export class LimoClient {
       baseTokenAmount: inputAmountLamports,
     };
 
-    const ixs: TransactionInstruction[] = [];
+    const ixs: Instruction[] = [];
 
     if (initVault) {
       ixs.push(
-        limoOperations.initializeVault(
+        await limoOperations.initializeVault(
           user,
           this._globalConfig,
           inputMint,
-          this.programId,
+          this.programAddress,
           inputMintProgramId,
         ),
       );
@@ -1245,19 +1298,19 @@ export class LimoClient {
       createKeypairRentExemptIxSync(
         user,
         order,
-        Order.layout.getSpan() + 8,
+        Order.layout.span + 8,
         ORDER_RENT_EXEMPTION_LAMPORTS,
-        this.programId,
+        this.programAddress,
       ),
     );
 
     const baseTokenMintProgramId = inputMintProgramId;
     const quoteTokenMintProgramId = outputMintProgramId;
 
-    let closeWsolAtaIxs: TransactionInstruction[] = [];
-    if (inputMint.equals(WRAPPED_SOL_MINT) && wrapUnwrapSol) {
+    let closeWsolAtaIxs: Instruction[] = [];
+    if (inputMint === WRAPPED_SOL_MINT && wrapUnwrapSol) {
       const { createIxs, fillIxs, closeIx } =
-        this.getInitIfNeededWSOLCreateAndCloseIxs(
+        await this.getInitIfNeededWSOLCreateAndCloseIxs(
           user,
           user,
           inputAmountLamports,
@@ -1267,12 +1320,12 @@ export class LimoClient {
     }
 
     ixs.push(
-      limoOperations.createOrder(
+      await limoOperations.createOrder(
         user,
         globalConfigOverride ? globalConfigOverride : this._globalConfig,
-        order.publicKey,
+        order.address,
         orderParams,
-        this.programId,
+        this.programAddress,
         baseTokenMintProgramId,
         quoteTokenMintProgramId,
       ),
@@ -1300,7 +1353,7 @@ export class LimoClient {
    */
   async createOrderGenericWithParamsIx(
     args: CreateOrderWithParamsArgs,
-  ): Promise<[TransactionInstruction[], Keypair]> {
+  ): Promise<[Instruction[], TransactionSigner]> {
     const {
       user,
       inputMint,
@@ -1337,7 +1390,7 @@ export class LimoClient {
         true,
         user,
         globalConfigOverride ? globalConfigOverride : this._globalConfig,
-        order.publicKey,
+        order.address,
       );
       ixs.push(...updateOrderPermissionlessIx);
     }
@@ -1348,7 +1401,7 @@ export class LimoClient {
         counterparty,
         user,
         globalConfigOverride ? globalConfigOverride : this._globalConfig,
-        order.publicKey,
+        order.address,
       );
       ixs.push(...updateOrderCounterpartyIx);
     }
@@ -1358,12 +1411,12 @@ export class LimoClient {
 
   async createOrderGenericWithParams(
     args: CreateOrderWithParamsArgs,
-    user: Keypair,
+    user: TransactionSigner,
     mode: string = "execute",
-  ): Promise<[TransactionSignature, Keypair]> {
+  ): Promise<[string, TransactionSigner]> {
     const [ixs, order] = await this.createOrderGenericWithParamsIx(args);
 
-    const log = "Create Order: " + order.publicKey.toString();
+    const log = "Create Order: " + order.address;
     const sig = await this.processTxn(user, ixs, mode, log, [order]);
 
     return [sig, order];
@@ -1383,18 +1436,18 @@ export class LimoClient {
    * @returns the transaction signature and the order keypair
    */
   async createOrderGeneric(
-    user: Keypair,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
     mode: string = "execute",
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    globalConfigOverride?: PublicKey,
-  ): Promise<[TransactionSignature, Keypair]> {
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    globalConfigOverride?: Address,
+  ): Promise<[string, TransactionSigner]> {
     const [ixs, order] = await this.createOrderGenericIx(
-      user.publicKey,
+      user,
       inputMint,
       outputMint,
       inputAmountLamports,
@@ -1404,7 +1457,7 @@ export class LimoClient {
       globalConfigOverride,
     );
 
-    const log = "Create Order: " + order.publicKey.toString();
+    const log = "Create Order: " + order.address;
     const sig = await this.processTxn(user, ixs, mode, log, [order]);
 
     return [sig, order];
@@ -1424,16 +1477,16 @@ export class LimoClient {
    * @returns the create order instruction and keypair to sign the transaction with
    */
   async placeBidIxs(
-    user: PublicKey,
-    quoteTokenMint: PublicKey,
-    baseTokenMint: PublicKey,
+    user: TransactionSigner,
+    quoteTokenMint: Address,
+    baseTokenMint: Address,
     baseUiAmount: Decimal,
     price: Decimal,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
-  ): Promise<[TransactionInstruction[], Keypair]> {
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
+  ): Promise<[Instruction[], TransactionSigner]> {
     let baseDecimals: number | undefined;
     let quoteDecimals: number | undefined;
     if (mintDecimals) {
@@ -1474,19 +1527,19 @@ export class LimoClient {
    * @returns the transaction signature and the order keypair
    */
   async placeBid(
-    user: Keypair,
-    quoteTokenMint: PublicKey,
-    baseTokenMint: PublicKey,
+    user: TransactionSigner,
+    quoteTokenMint: Address,
+    baseTokenMint: Address,
     baseUiAmount: Decimal,
     price: Decimal,
     mode: string = "execute",
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
-  ): Promise<[TransactionSignature, Keypair]> {
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
+  ): Promise<[string, TransactionSigner]> {
     const [ixs, order] = await this.placeBidIxs(
-      user.publicKey,
+      user,
       quoteTokenMint,
       baseTokenMint,
       baseUiAmount,
@@ -1507,7 +1560,7 @@ export class LimoClient {
       " " +
       baseTokenMint.toString().slice(0, 5) +
       " Order: " +
-      order.publicKey.toString();
+      order.address;
 
     const sig = await this.processTxn(user, ixs, mode, log, [order]);
 
@@ -1528,16 +1581,16 @@ export class LimoClient {
    * @returns the create order instruction and keypair to sign the transaction with
    */
   async placeAskIxs(
-    user: PublicKey,
-    quoteTokenMint: PublicKey,
-    baseTokenMint: PublicKey,
+    user: TransactionSigner,
+    quoteTokenMint: Address,
+    baseTokenMint: Address,
     quoteUiAmount: Decimal,
     price: Decimal,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
-  ): Promise<[TransactionInstruction[], Keypair]> {
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
+  ): Promise<[Instruction[], TransactionSigner]> {
     let baseDecimals: number | undefined;
     let quoteDecimals: number | undefined;
     if (mintDecimals) {
@@ -1578,19 +1631,19 @@ export class LimoClient {
    * @returns the transaction signature and the order keypair
    */
   async placeAsk(
-    user: Keypair,
-    quoteTokenMint: PublicKey,
-    baseTokenMint: PublicKey,
+    user: TransactionSigner,
+    quoteTokenMint: Address,
+    baseTokenMint: Address,
     quoteUiAmount: Decimal,
     price: Decimal,
     mode: string = "execute",
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-    globalConfigOverride?: PublicKey,
-  ): Promise<[TransactionSignature, Keypair]> {
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    mintDecimals?: Map<Address, number>,
+    globalConfigOverride?: Address,
+  ): Promise<[string, TransactionSigner]> {
     const [ixs, order] = await this.placeAskIxs(
-      user.publicKey,
+      user,
       quoteTokenMint,
       baseTokenMint,
       quoteUiAmount,
@@ -1611,7 +1664,7 @@ export class LimoClient {
       " " +
       baseTokenMint.toString().slice(0, 5) +
       " Order: " +
-      order.publicKey.toString();
+      order.address;
 
     const sig = await this.processTxn(user, ixs, mode, log, [order]);
 
@@ -1629,52 +1682,57 @@ export class LimoClient {
    * @param outputMintDecimals - the output mint decimals
    * @returns the create take order instruction
    */
-  takeOrderIx(
-    taker: PublicKey,
+  async takeOrderIx(
+    taker: TransactionSigner,
     order: OrderStateAndAddress,
     inputAmountLamports: BN,
     minOutputAmountLamports: BN,
-    expressRelayProgramId: PublicKey,
+    expressRelayProgramId: Address,
     permissionlessTipLamports?: BN,
     permissionless?: boolean,
     wrapUnwrapSol: boolean = true,
-  ): TransactionInstruction[] {
-    let ixs: TransactionInstruction[] = [];
-    let closeWsolAtaIxs: TransactionInstruction[] = [];
+  ): Promise<Instruction[]> {
+    let ixs: Instruction[] = [];
+    let closeWsolAtaIxs: Instruction[] = [];
 
-    let takerInputAta: PublicKey;
-    if (order.state.inputMint.equals(WRAPPED_SOL_MINT)) {
+    let takerInputAta: Address;
+    if (order.state.inputMint === WRAPPED_SOL_MINT) {
       const {
         createIxs,
         fillIxs: _fill,
         closeIx,
         ata,
-      } = this.getInitIfNeededWSOLCreateAndCloseIxs(taker, taker, new BN(0));
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        taker,
+        taker,
+        new BN(0),
+      );
       takerInputAta = ata;
       if (wrapUnwrapSol) {
         ixs.push(...createIxs);
         closeWsolAtaIxs.push(...closeIx);
       }
     } else {
-      const { ata, createAtaIx: createTakerInputAta } = createAtaIdempotent(
-        taker,
-        taker,
-        order.state.inputMint,
-        order.state.inputMintProgramId,
-      );
+      const { ata, createAtaIx: createTakerInputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.inputMint,
+          order.state.inputMintProgramId,
+        );
       takerInputAta = ata;
       ixs.push(createTakerInputAta);
     }
 
-    let takerOutputAta: PublicKey;
-    if (order.state.outputMint.equals(WRAPPED_SOL_MINT)) {
+    let takerOutputAta: Address;
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
       const outputExpectedOutForInputAmount = divCeil(
         order.state.expectedOutputAmount.mul(inputAmountLamports),
         order.state.initialInputAmount,
       );
 
       const { createIxs, fillIxs, closeIx, ata } =
-        this.getInitIfNeededWSOLCreateAndCloseIxs(
+        await this.getInitIfNeededWSOLCreateAndCloseIxs(
           taker,
           taker,
           outputExpectedOutForInputAmount,
@@ -1685,28 +1743,29 @@ export class LimoClient {
         closeWsolAtaIxs.push(...closeIx);
       }
     } else {
-      const { ata, createAtaIx: createTakerOutputAta } = createAtaIdempotent(
-        taker,
-        taker,
-        order.state.outputMint,
-        order.state.outputMintProgramId,
-      );
+      const { ata, createAtaIx: createTakerOutputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.outputMint,
+          order.state.outputMintProgramId,
+        );
       takerOutputAta = ata;
       ixs.push(createTakerOutputAta);
     }
 
-    let makerOutputAta: PublicKey;
-    let intermediaryOutputTokenAccount: PublicKey;
+    let makerOutputAta: Address | undefined;
+    let intermediaryOutputTokenAccount: Address | undefined;
 
-    if (order.state.outputMint.equals(WRAPPED_SOL_MINT)) {
-      makerOutputAta = this.getProgramID();
-      intermediaryOutputTokenAccount = getIntermediaryTokenAccountPDA(
-        this.programId,
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      makerOutputAta = undefined;
+      intermediaryOutputTokenAccount = await getIntermediaryTokenAccountPDA(
+        this.programAddress,
         order.address,
       );
     } else {
       // create maker ata
-      const { ata, createAtaIx } = createAtaIdempotent(
+      const { ata, createAtaIx } = await createAtaIdempotent(
         order.state.maker,
         taker,
         order.state.outputMint,
@@ -1714,11 +1773,11 @@ export class LimoClient {
       );
       makerOutputAta = ata;
       ixs.push(createAtaIx);
-      intermediaryOutputTokenAccount = this.programId;
+      intermediaryOutputTokenAccount = undefined;
     }
 
     ixs.push(
-      limoOperations.takeOrder({
+      await limoOperations.takeOrder({
         taker,
         maker: order.state.maker,
         globalConfig: order.state.globalConfig,
@@ -1727,7 +1786,7 @@ export class LimoClient {
         order: order.address,
         inputAmountLamports,
         minOutputAmountLamports,
-        programId: this.programId,
+        programAddress: this.programAddress,
         expressRelayProgramId,
         takerInputAta,
         takerOutputAta,
@@ -1759,15 +1818,15 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async permissionlessTakeOrder(
-    crank: Keypair,
+    crank: TransactionSigner,
     order: OrderStateAndAddress,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
-    expressRelayProgramId: PublicKey,
+    expressRelayProgramId: Address,
     mode: string,
     permissionlessTipLamports: BN,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-  ): Promise<TransactionSignature> {
+    mintDecimals?: Map<Address, number>,
+  ): Promise<string> {
     let inputMintDecimals: number | undefined;
     let outputMintDecimals: number | undefined;
     if (mintDecimals) {
@@ -1781,8 +1840,8 @@ export class LimoClient {
       ? outputMintDecimals
       : await getMintDecimals(this._connection, order.state.outputMint);
 
-    const ixs = this.takeOrderIx(
-      crank.publicKey,
+    const ixs = await this.takeOrderIx(
+      crank,
       order,
       inputAmountLamports,
       outputAmountLamports,
@@ -1798,18 +1857,18 @@ export class LimoClient {
 
     const log =
       "Taker Order: " +
-      order.address.toString() +
+      order.address +
       " selling " +
       lamportsToAmountBN(inputAmountLamports, inputMintDecimals).toString() +
       " token ";
-    order.state.inputMint.toString().slice(0, 5) +
+    order.state.inputMint.slice(0, 5) +
       " for " +
       lamportsToAmountBN(
         outputExpectedOutForInputAmount,
         outputMintDecimals,
       ).toString() +
       " token " +
-      order.state.outputMint.toString().slice(0, 5);
+      order.state.outputMint.slice(0, 5);
 
     const sig = await this.processTxn(crank, ixs, mode, log, []);
 
@@ -1830,45 +1889,50 @@ export class LimoClient {
    * @returns the create flash take order instruction - in between the start and
    * end flash take order instructions, the swap and permissioning logic should exist
    */
-  flashTakeOrderIxs(
-    taker: PublicKey,
+  async flashTakeOrderIxs(
+    taker: TransactionSigner,
     order: OrderStateAndAddress,
     inputAmountLamports: BN,
     minOutputAmountLamports: BN,
-    expressRelayProgramId: PublicKey,
+    expressRelayProgramId: Address,
     permissionlessTipLamports?: BN,
     permissionless?: boolean,
     wrapUnwrapSol: boolean = true,
-  ): FlashTakeOrderIxs {
-    let createAtaIxs: TransactionInstruction[] = [];
-    let closeWsolAtaIxs: TransactionInstruction[] = [];
+  ): Promise<FlashTakeOrderIxs> {
+    let createAtaIxs: Instruction[] = [];
+    let closeWsolAtaIxs: Instruction[] = [];
 
-    let takerInputAta: PublicKey;
-    if (order.state.inputMint.equals(WRAPPED_SOL_MINT)) {
+    let takerInputAta: Address;
+    if (order.state.inputMint === WRAPPED_SOL_MINT) {
       const {
         createIxs,
         fillIxs: _fill,
         closeIx,
         ata,
-      } = this.getInitIfNeededWSOLCreateAndCloseIxs(taker, taker, new BN(0));
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        taker,
+        taker,
+        new BN(0),
+      );
       takerInputAta = ata;
       if (wrapUnwrapSol) {
         createAtaIxs.push(...createIxs);
         closeWsolAtaIxs.push(...closeIx);
       }
     } else {
-      const { ata, createAtaIx: createTakerInputAta } = createAtaIdempotent(
-        taker,
-        taker,
-        order.state.inputMint,
-        order.state.inputMintProgramId,
-      );
+      const { ata, createAtaIx: createTakerInputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.inputMint,
+          order.state.inputMintProgramId,
+        );
       takerInputAta = ata;
       createAtaIxs.push(createTakerInputAta);
     }
 
-    let takerOutputAta: PublicKey;
-    if (order.state.outputMint.equals(WRAPPED_SOL_MINT)) {
+    let takerOutputAta: Address;
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
       const outputExpectedOutForInputAmount = divCeil(
         order.state.expectedOutputAmount.mul(inputAmountLamports),
         order.state.initialInputAmount,
@@ -1879,7 +1943,7 @@ export class LimoClient {
         fillIxs: _fillIxs,
         closeIx,
         ata,
-      } = this.getInitIfNeededWSOLCreateAndCloseIxs(
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
         taker,
         taker,
         outputExpectedOutForInputAmount,
@@ -1890,28 +1954,29 @@ export class LimoClient {
         closeWsolAtaIxs.push(...closeIx);
       }
     } else {
-      const { ata, createAtaIx: createTakerOutputAta } = createAtaIdempotent(
-        taker,
-        taker,
-        order.state.outputMint,
-        order.state.outputMintProgramId,
-      );
+      const { ata, createAtaIx: createTakerOutputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.outputMint,
+          order.state.outputMintProgramId,
+        );
       takerOutputAta = ata;
       createAtaIxs.push(createTakerOutputAta);
     }
 
-    let makerOutputAta: PublicKey;
-    let intermediaryOutputTokenAccount: PublicKey;
+    let makerOutputAta: Address | undefined;
+    let intermediaryOutputTokenAccount: Address | undefined;
 
-    if (order.state.outputMint.equals(WRAPPED_SOL_MINT)) {
-      makerOutputAta = this.getProgramID();
-      intermediaryOutputTokenAccount = getIntermediaryTokenAccountPDA(
-        this.programId,
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      makerOutputAta = undefined;
+      intermediaryOutputTokenAccount = await getIntermediaryTokenAccountPDA(
+        this.programAddress,
         order.address,
       );
     } else {
       // create maker ata
-      const { ata, createAtaIx } = createAtaIdempotent(
+      const { ata, createAtaIx } = await createAtaIdempotent(
         order.state.maker,
         taker,
         order.state.outputMint,
@@ -1919,11 +1984,11 @@ export class LimoClient {
       );
       makerOutputAta = ata;
       createAtaIxs.push(createAtaIx);
-      intermediaryOutputTokenAccount = this.programId;
+      intermediaryOutputTokenAccount = undefined;
     }
 
     const { startIx: startFlashIx, endIx: endFlashIx } =
-      limoOperations.flashTakeOrder({
+      await limoOperations.flashTakeOrder({
         taker,
         maker: order.state.maker,
         globalConfig: order.state.globalConfig,
@@ -1932,7 +1997,7 @@ export class LimoClient {
         order: order.address,
         inputAmountLamports,
         minOutputAmountLamports,
-        programId: this.programId,
+        programAddress: this.programAddress,
         expressRelayProgramId,
         takerInputAta,
         takerOutputAta,
@@ -1959,25 +2024,28 @@ export class LimoClient {
    * Flash take an order
    * @param crank - the crank keypair
    * @param order - the order state and address
-   * @param inputAmountDecimals - the input amount in decimals
-   * @param outputAmountDecimals - the output amount in decimals
+   * @param inputAmountLamports - the input amount in lamports
+   * @param outputAmountLamports - the output amount in lamports
    * @param expressRelayProgramId - the express relay program id
    * @param mode - the execution mode (simulate/execute/multisig)
+   * @param swapIxs
+   * @param permissionlessTipLamports
+   * @param extraSigners
    * @param mintDecimals - map of mint addresses and their number of decimals
    * @returns the transaction signature
    */
   async permissionlessFlashTakeOrder(
-    crank: Keypair,
+    crank: TransactionSigner,
     order: OrderStateAndAddress,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
-    expressRelayProgramId: PublicKey,
+    expressRelayProgramId: Address,
     mode: string,
-    swapIxs: TransactionInstruction[],
+    swapIxs: Instruction[],
     permissionlessTipLamports: BN,
-    extraSigners: Keypair[],
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-  ): Promise<TransactionSignature> {
+    extraSigners: TransactionSigner[],
+    mintDecimals?: Map<Address, number>,
+  ): Promise<string> {
     let inputMintDecimals: number | undefined;
     let outputMintDecimals: number | undefined;
     if (mintDecimals) {
@@ -1992,8 +2060,8 @@ export class LimoClient {
       : await getMintDecimals(this._connection, order.state.outputMint);
 
     const { createAtaIxs, startFlashIx, endFlashIx, closeWsolAtaIxs } =
-      this.flashTakeOrderIxs(
-        crank.publicKey,
+      await this.flashTakeOrderIxs(
+        crank,
         order,
         inputAmountLamports,
         outputAmountLamports,
@@ -2009,18 +2077,18 @@ export class LimoClient {
 
     const log =
       "Taker Order: " +
-      order.address.toString() +
+      order.address +
       " selling " +
       lamportsToAmountBN(inputAmountLamports, inputMintDecimals).toString() +
       " token ";
-    order.state.inputMint.toString().slice(0, 5) +
+    order.state.inputMint.slice(0, 5) +
       " for " +
       lamportsToAmountBN(
         outputExpectedOutForInputAmount,
         outputMintDecimals,
       ).toString() +
       " token " +
-      order.state.outputMint.toString().slice(0, 5);
+      order.state.outputMint.slice(0, 5);
 
     const sig = await this.processTxn(
       crank,
@@ -2030,7 +2098,7 @@ export class LimoClient {
         ...swapIxs,
         endFlashIx,
         ...closeWsolAtaIxs,
-      ],
+      ] satisfies Instruction[],
       mode,
       log,
       extraSigners,
@@ -2049,10 +2117,10 @@ export class LimoClient {
    * @param outputTa - the output mint token account
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
-  logUserSwapBalancesIxs(args: LogUserSwapBalancesIxArgs): {
-    beforeSwapIx: TransactionInstruction;
-    afterSwapIx: TransactionInstruction;
-  } {
+  async logUserSwapBalancesIxs(args: LogUserSwapBalancesIxArgs): Promise<{
+    beforeSwapIx: Instruction;
+    afterSwapIx: Instruction;
+  }> {
     const {
       user,
       inputMint,
@@ -2067,7 +2135,7 @@ export class LimoClient {
       simulatedAmountOutNextBest,
       aggregatorId,
       nextBestAggregatorId,
-      pdaReferrer = args.pdaReferrer ?? this.programId,
+      pdaReferrer = args.pdaReferrer ?? this.programAddress,
       voteAccount,
     } = args;
 
@@ -2078,15 +2146,18 @@ export class LimoClient {
         outputMint,
         inputTa,
         outputTa,
-        pdaReferrer,
+        pdaReferrer: asOption(pdaReferrer),
         swapProgramId: swapProgarmId,
       },
-      userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
-      eventAuthority: getEventAuthorityPDA(this.programId),
-      program: this.programId,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      userSwapBalanceState: await getUserSwapBalanceStatePDA(
+        user.address,
+        this.programAddress,
+      ),
+      eventAuthority: await getEventAuthorityPDA(this.programAddress),
+      program: this.programAddress,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      rent: SYSVAR_RENT_ADDRESS,
+      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     });
 
     const padding: number[] = Array(2).fill(0);
@@ -2109,69 +2180,85 @@ export class LimoClient {
           outputMint,
           inputTa,
           outputTa,
-          pdaReferrer,
+          pdaReferrer: asOption(pdaReferrer),
           swapProgramId: swapProgarmId,
         },
-        userSwapBalanceState: getUserSwapBalanceStatePDA(user, this.programId),
-        eventAuthority: getEventAuthorityPDA(this.programId),
-        program: this.programId,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        userSwapBalanceState: await getUserSwapBalanceStatePDA(
+          user.address,
+          this.programAddress,
+        ),
+        eventAuthority: await getEventAuthorityPDA(this.programAddress),
+        program: this.programAddress,
+        systemProgram: SYSTEM_PROGRAM_ADDRESS,
+        rent: SYSVAR_RENT_ADDRESS,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
       },
     );
 
+    let finalLogIxStart: Instruction;
+    let finalLogIxEnd: Instruction;
     if (voteAccount) {
       const voteAccountMetadata = {
-        pubkey: voteAccount,
-        isSigner: false,
-        isWritable: false,
+        address: voteAccount,
+        role: AccountRole.READONLY,
+      } satisfies AccountMeta;
+      finalLogIxStart = {
+        data: logIxStart.data,
+        programAddress: logIxStart.programAddress,
+        accounts: [
+          ...Array.from(logIxStart.accounts || []),
+          voteAccountMetadata,
+        ],
       };
-      logIxStart.keys.push(voteAccountMetadata);
-      logIxEnd.keys.push(voteAccountMetadata);
+      finalLogIxEnd = {
+        data: logIxEnd.data,
+        programAddress: logIxEnd.programAddress,
+        accounts: [...Array.from(logIxEnd.accounts || []), voteAccountMetadata],
+      };
+    } else {
+      finalLogIxStart = logIxStart;
+      finalLogIxEnd = logIxEnd;
     }
 
     return {
-      beforeSwapIx: logIxStart,
-      afterSwapIx: logIxEnd,
+      beforeSwapIx: finalLogIxStart,
+      afterSwapIx: finalLogIxEnd,
     };
   }
 
   /**
    * Get the create close order instruction
    * @param user - the user address
-   * @param inputMont - the inputMint for the swap
+   * @param inputMint - the inputMint for the swap
    * @param outputMint - the outputMint for the swap
    * @param inputMintProgramId - the input mint program id
    * @param outputMintProgramId - the output mint program id
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
   async logUserSwapBalances(
-    user: Keypair,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    setupIxs: TransactionInstruction[] = [],
-    mockSwapIxs: TransactionInstruction[] = [],
-    mockSwapSigners: Keypair[] = [],
-    swapProgarmId: PublicKey,
-    voteAccount?: PublicKey,
-  ): Promise<TransactionSignature> {
-    const inputTa = getAssociatedTokenAddressSync(
-      inputMint,
-      user.publicKey,
-      true,
-      inputMintProgramId,
-    );
-    const outputTa = getAssociatedTokenAddressSync(
-      outputMint,
-      user.publicKey,
-      true,
-      outputMintProgramId,
-    );
-    const { beforeSwapIx, afterSwapIx } = this.logUserSwapBalancesIxs({
-      user: user.publicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    setupIxs: Instruction[] = [],
+    mockSwapIxs: Instruction[] = [],
+    mockSwapSigners: TransactionSigner[] = [],
+    swapProgarmId: Address,
+    voteAccount?: Address,
+  ): Promise<string> {
+    const [inputTa] = await findAssociatedTokenPda({
+      mint: inputMint,
+      owner: user.address,
+      tokenProgram: inputMintProgramId,
+    });
+    const [outputTa] = await findAssociatedTokenPda({
+      mint: outputMint,
+      owner: user.address,
+      tokenProgram: outputMintProgramId,
+    });
+    const { beforeSwapIx, afterSwapIx } = await this.logUserSwapBalancesIxs({
+      user: user,
       inputMint,
       outputMint,
       inputTa,
@@ -2184,7 +2271,7 @@ export class LimoClient {
       simulatedAmountOutNextBest: new BN(0),
       aggregatorId: 0,
       nextBestAggregatorId: 0,
-      pdaReferrer: this.programId,
+      pdaReferrer: this.programAddress,
       voteAccount,
     });
 
@@ -2211,10 +2298,10 @@ export class LimoClient {
    * @param outputMintProgramId - the output mint program id
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
-  assertUserSwapBalancesIxs(args: AssertUserSwapBalancesIxArgs): {
-    beforeSwapIx: TransactionInstruction;
-    afterSwapIx: TransactionInstruction;
-  } {
+  async assertUserSwapBalancesIxs(args: AssertUserSwapBalancesIxArgs): Promise<{
+    beforeSwapIx: Instruction;
+    afterSwapIx: Instruction;
+  }> {
     const {
       user,
       inputMint,
@@ -2226,41 +2313,39 @@ export class LimoClient {
       inputTa,
       outputTa,
     } = args;
-    let inputMintTa: PublicKey;
+    let inputMintTa: Address;
     if (inputTa) {
       inputMintTa = inputTa;
     } else if (inputMint && inputMintProgramId) {
-      inputMintTa = getAssociatedTokenAddressSync(
-        inputMint,
-        user,
-        true,
-        inputMintProgramId,
-      );
+      [inputMintTa] = await findAssociatedTokenPda({
+        mint: inputMint,
+        owner: user.address,
+        tokenProgram: inputMintProgramId,
+      });
     } else {
       throw new Error(
         "Input mint and program ID must be provided if inputTa is not given",
       );
     }
 
-    let outputMintTa: PublicKey;
+    let outputMintTa: Address;
     if (outputTa) {
       outputMintTa = outputTa;
     } else if (outputMint && outputMintProgramId) {
-      outputMintTa = getAssociatedTokenAddressSync(
-        outputMint,
-        user,
-        true,
-        outputMintProgramId,
-      );
+      [outputMintTa] = await findAssociatedTokenPda({
+        mint: outputMint,
+        owner: user.address,
+        tokenProgram: outputMintProgramId,
+      });
     } else {
       throw new Error(
         "Output mint and program ID must be provided if outputTa is not given",
       );
     }
 
-    const userSwapBalanceState = getUserSwapBalanceAssertStatePDA(
-      user,
-      this.programId,
+    const userSwapBalanceState = await getUserSwapBalanceAssertStatePDA(
+      user.address,
+      this.programAddress,
     );
 
     const logIxStart = assertUserSwapBalancesStart({
@@ -2268,9 +2353,9 @@ export class LimoClient {
       inputTa: inputMintTa,
       outputTa: outputMintTa,
       userSwapBalanceState,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-      sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      rent: SYSVAR_RENT_ADDRESS,
+      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     });
 
     const logIxEnd = assertUserSwapBalancesEnd(
@@ -2283,9 +2368,9 @@ export class LimoClient {
         inputTa: inputMintTa,
         outputTa: outputMintTa,
         userSwapBalanceState,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
-        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SYSTEM_PROGRAM_ADDRESS,
+        rent: SYSVAR_RENT_ADDRESS,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
       },
     );
 
@@ -2305,19 +2390,19 @@ export class LimoClient {
    * @returns the log ixs - to be used once at the beginning and once at the end
    */
   async assertUserSwapBalances(
-    user: Keypair,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
     maxInputAmountChange: BN,
     minOutputAmountChange: BN,
-    setupIxs: TransactionInstruction[] = [],
-    mockSwapIxs: TransactionInstruction[] = [],
-    mockSwapSigners: Keypair[] = [],
-  ): Promise<TransactionSignature> {
-    const { beforeSwapIx, afterSwapIx } = this.assertUserSwapBalancesIxs({
-      user: user.publicKey,
+    setupIxs: Instruction[] = [],
+    mockSwapIxs: Instruction[] = [],
+    mockSwapSigners: TransactionSigner[] = [],
+  ): Promise<string> {
+    const { beforeSwapIx, afterSwapIx } = await this.assertUserSwapBalancesIxs({
+      user,
       inputMint,
       outputMint,
       inputMintProgramId,
@@ -2365,12 +2450,12 @@ export class LimoClient {
    * @returns an array of arrays of instructions to close and claim tips for all filled orders -
    * this should be used as multiple transactions
    */
-  getCloseAndClaimTipsForFilledOrdersTxsIxs(
-    maker: PublicKey,
+  async getCloseAndClaimTipsForFilledOrdersTxsIxs(
+    maker: TransactionSigner,
     orders: OrderDisplay[],
     batchSize: number = MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX,
-  ): TransactionInstruction[][] {
-    let ixsArrays: TransactionInstruction[][] = [];
+  ): Promise<Instruction[][]> {
+    let ixsArrays: Instruction[][] = [];
     ixsArrays.push([]);
 
     for (const order of orders) {
@@ -2381,7 +2466,10 @@ export class LimoClient {
           address: order.address,
         };
 
-        const ixs = this.closeOrderAndClaimTipIx(maker, orderStateAndAddress);
+        const ixs = await this.closeOrderAndClaimTipIx(
+          maker,
+          orderStateAndAddress,
+        );
 
         // Once the batchSize of previous array is hit, create a new array
         if (ixsArrays[ixsArrays.length - 1].length + ixs.length > batchSize) {
@@ -2401,45 +2489,50 @@ export class LimoClient {
    * @param order - the order state and address
    * @returns the create close order and claim tip instruction
    */
-  closeOrderAndClaimTipIx(
-    maker: PublicKey,
+  async closeOrderAndClaimTipIx(
+    maker: TransactionSigner,
     order: OrderStateAndAddress,
     wrapUnwrapSol: boolean = true,
-  ): TransactionInstruction[] {
-    let ixs: TransactionInstruction[] = [];
-    let closeWsolAtaIxs: TransactionInstruction[] = [];
-    let makerInputAta: PublicKey;
-    if (order.state.inputMint.equals(WRAPPED_SOL_MINT)) {
+  ): Promise<Instruction[]> {
+    let ixs: Instruction[] = [];
+    let closeWsolAtaIxs: Instruction[] = [];
+    let makerInputAta: Address;
+    if (order.state.inputMint === WRAPPED_SOL_MINT) {
       const {
         createIxs,
         fillIxs: _fill,
         closeIx,
         ata,
-      } = this.getInitIfNeededWSOLCreateAndCloseIxs(maker, maker, new BN(0));
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        maker,
+        maker,
+        new BN(0),
+      );
       makerInputAta = ata;
       if (wrapUnwrapSol) {
         ixs.push(...createIxs);
         closeWsolAtaIxs.push(...closeIx);
       }
     } else {
-      const { ata, createAtaIx: createMakerInputAta } = createAtaIdempotent(
-        maker,
-        maker,
-        order.state.inputMint,
-        order.state.inputMintProgramId,
-      );
+      const { ata, createAtaIx: createMakerInputAta } =
+        await createAtaIdempotent(
+          maker.address,
+          maker,
+          order.state.inputMint,
+          order.state.inputMintProgramId,
+        );
       makerInputAta = ata;
       ixs.push(createMakerInputAta);
     }
 
     ixs.push(
-      limoOperations.closeOrderAndClaimTip({
+      await limoOperations.closeOrderAndClaimTip({
         maker: maker,
         globalConfig: order.state.globalConfig,
         inputMint: order.state.inputMint,
         outputMint: order.state.outputMint,
         order: order.address,
-        programId: this.programId,
+        programAddress: this.programAddress,
         makerInputAta,
         inputTokenProgram: order.state.inputMintProgramId,
       }),
@@ -2459,25 +2552,25 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async closeOrderAndClaimTip(
-    maker: Keypair,
+    maker: TransactionSigner,
     order: OrderStateAndAddress,
     mode: string,
-    mintDecimals?: PubkeyHashMap<PublicKey, number>,
-  ): Promise<TransactionSignature> {
-    let ixs = this.closeOrderAndClaimTipIx(maker.publicKey, order);
+    mintDecimals?: Map<Address, number>,
+  ): Promise<string> {
+    let ixs = await this.closeOrderAndClaimTipIx(maker, order);
 
     let inputMintDecimals: number | undefined;
     let tipMintDecimals: number | undefined;
     if (mintDecimals) {
       inputMintDecimals = mintDecimals.get(order.state.inputMint);
-      tipMintDecimals = mintDecimals.get(NATIVE_MINT);
+      tipMintDecimals = mintDecimals.get(WRAPPED_SOL_MINT);
     }
     inputMintDecimals = inputMintDecimals
       ? inputMintDecimals
       : await getMintDecimals(this._connection, order.state.inputMint);
     tipMintDecimals = tipMintDecimals
       ? tipMintDecimals
-      : await getMintDecimals(this._connection, NATIVE_MINT);
+      : await getMintDecimals(this._connection, WRAPPED_SOL_MINT);
 
     const log =
       "Close Order: " +
@@ -2514,17 +2607,21 @@ export class LimoClient {
    */
   async updateOrderGenericIx(
     order: OrderStateAndAddress,
-    user: PublicKey,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
-    globalConfigOverride?: PublicKey,
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
+    globalConfigOverride?: Address,
     wrapUnwrapSol: boolean = true,
-  ): Promise<[TransactionInstruction[], Keypair]> {
-    let closeOrderIx = this.closeOrderAndClaimTipIx(user, order, wrapUnwrapSol);
+  ): Promise<[Instruction[], TransactionSigner]> {
+    let closeOrderIx = await this.closeOrderAndClaimTipIx(
+      user,
+      order,
+      wrapUnwrapSol,
+    );
 
     let [createOrderIx, orderKeypair] = await this.createOrderGenericIx(
       user,
@@ -2557,20 +2654,20 @@ export class LimoClient {
    */
   async updateOrderGeneric(
     order: OrderStateAndAddress,
-    user: Keypair,
-    inputMint: PublicKey,
-    outputMint: PublicKey,
+    user: TransactionSigner,
+    inputMint: Address,
+    outputMint: Address,
     inputAmountLamports: BN,
     outputAmountLamports: BN,
-    inputMintProgramId: PublicKey,
-    outputMintProgramId: PublicKey,
+    inputMintProgramId: Address,
+    outputMintProgramId: Address,
     mode: string = "execute",
-    globalConfigOverride?: PublicKey,
+    globalConfigOverride?: Address,
     wrapUnwrapSol: boolean = true,
-  ): Promise<[string, Keypair]> {
+  ): Promise<[string, TransactionSigner]> {
     const [ixs, orderKp] = await this.updateOrderGenericIx(
       order,
-      user.publicKey,
+      user,
       inputMint,
       outputMint,
       inputAmountLamports,
@@ -2586,7 +2683,7 @@ export class LimoClient {
       "closing order: " +
       order.toString() +
       " and creating order " +
-      orderKp.publicKey.toString();
+      orderKp.address;
 
     const sig = await this.processTxn(user, ixs, mode, log, [orderKp]);
 
@@ -2595,12 +2692,12 @@ export class LimoClient {
 
   updateOrderIx(
     mode: string,
-    value: boolean | PublicKey,
-    maker: PublicKey,
-    globalConfig: PublicKey,
-    order: PublicKey,
+    value: boolean | Address,
+    maker: TransactionSigner,
+    globalConfig: Address,
+    order: Address,
   ) {
-    const ixs: TransactionInstruction[] = [];
+    const ixs: Instruction[] = [];
 
     ixs.push(
       limoOperations.updateOrder(
@@ -2609,7 +2706,7 @@ export class LimoClient {
         maker,
         globalConfig,
         order,
-        this.programId,
+        this.programAddress,
       ),
     );
 
@@ -2617,16 +2714,16 @@ export class LimoClient {
   }
 
   updateOrder(
-    maker: Keypair,
+    maker: TransactionSigner,
     updateMode: string,
-    value: boolean | PublicKey,
-    order: PublicKey,
+    value: boolean | Address,
+    order: Address,
     mode: string,
-  ): Promise<TransactionSignature> {
+  ): Promise<string> {
     const ixs = this.updateOrderIx(
       updateMode,
       value,
-      maker.publicKey,
+      maker,
       this._globalConfig,
       order,
     );
@@ -2646,22 +2743,21 @@ export class LimoClient {
    * @param globalConfigOverride - the global config override
    * @returns the update global config instruction
    */
-  updateGlobalConfigIx(
+  async updateGlobalConfigIx(
+    admin: TransactionSigner,
     mode: string,
-    value: number | PublicKey,
-    globalConfigOverride?: PublicKey,
-  ): TransactionInstruction[] {
-    const ixs: TransactionInstruction[] = [];
-
-    const gc = this.getGlobalConfigStateSync();
+    value: number | Address,
+    globalConfigOverride?: Address,
+  ): Promise<Instruction[]> {
+    const ixs: Instruction[] = [];
 
     ixs.push(
       limoOperations.updateGlobalConfigIx(
-        gc.adminAuthority,
+        admin,
         globalConfigOverride ? globalConfigOverride : this._globalConfig,
         UpdateGlobalConfigMode.fromDecoded({ [mode]: "" }),
         value,
-        this.programId,
+        this.programAddress,
       ),
     );
 
@@ -2678,14 +2774,15 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async updateGlobalConfig(
-    admin: Keypair,
+    admin: TransactionSigner,
     updateMode: string,
-    value: number | PublicKey,
+    value: number | Address,
     mode: string,
-    globalConfigOverride?: PublicKey,
-  ): Promise<TransactionSignature> {
+    globalConfigOverride?: Address,
+  ): Promise<string> {
     await this.getGlobalConfigState();
-    const ixs = this.updateGlobalConfigIx(
+    const ixs = await this.updateGlobalConfigIx(
+      admin,
       updateMode,
       value,
       globalConfigOverride,
@@ -2693,7 +2790,7 @@ export class LimoClient {
 
     const log =
       "Update global config: " +
-      this._globalConfig.toString() +
+      this._globalConfig +
       " with mode " +
       updateMode +
       " and value " +
@@ -2708,24 +2805,22 @@ export class LimoClient {
 
   /**
    * Get the update global config admin instruction - should be signed by the current globalConfig.adminAuthorityCached
-   * @param globalConfigOverride - the global config override
    * @returns the update global config admin instruction
    */
   async updateGlobalConfigAdminIx(
-    globalConfigOverride?: PublicKey,
-  ): Promise<TransactionInstruction> {
-    const globalConfigState = globalConfigOverride
-      ? await GlobalConfig.fetch(this._connection, globalConfigOverride)
-      : await this.getGlobalConfigState();
+    admin: TransactionSigner,
+  ): Promise<Instruction> {
+    const globalConfigState = await this.getGlobalConfigState();
 
     if (!globalConfigState) {
       throw new Error("Global config not found");
     }
 
     const ix = limoOperations.updateGlobalConfigAdminIx(
+      admin,
       this._globalConfig,
       globalConfigState,
-      this.programId,
+      this.programAddress,
     );
 
     return ix;
@@ -2735,21 +2830,19 @@ export class LimoClient {
    * Update the global config admin
    * @param admin - the admin keypair, should match the current globalConfig.adminAuthorityCached
    * @param mode - the execution mode (simulate/execute/multisig)
-   * @param globalConfigOverride - the global config override
    * @returns the transaction signature
    */
   async updateGlobalConfigAdmin(
-    admin: Keypair,
+    admin: TransactionSigner,
     mode: string,
-    globalConfigOverride?: PublicKey,
-  ): Promise<TransactionSignature> {
-    const ix = await this.updateGlobalConfigAdminIx(globalConfigOverride);
+  ): Promise<string> {
+    const ix = await this.updateGlobalConfigAdminIx(admin);
 
     const log =
       "Update global config admin: " +
-      this._globalConfig.toString() +
+      this._globalConfig +
       " with admin " +
-      admin.publicKey.toBase58();
+      admin.address;
 
     const sig = await this.processTxn(admin, [ix], mode, log, []);
 
@@ -2762,19 +2855,19 @@ export class LimoClient {
    * @param globalConfigOverride - the global config override
    * @returns the withdraw host tip instruction
    */
-  withdrawHostTipIx(
-    admin: PublicKey,
-    globalConfigOverride?: PublicKey,
-  ): TransactionInstruction[] {
-    let ixs: TransactionInstruction[] = [];
+  async withdrawHostTipIx(
+    admin: TransactionSigner,
+    globalConfigOverride?: Address,
+  ): Promise<Instruction[]> {
+    let ixs: Instruction[] = [];
 
     ixs.push(
-      withdrawHostTipIx({
+      await withdrawHostTipIx({
         admin,
         globalConfig: globalConfigOverride
           ? globalConfigOverride
           : this._globalConfig,
-        programId: this.programId,
+        programAddress: this.programAddress,
       }),
     );
 
@@ -2789,17 +2882,17 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async withdrawHostTip(
-    admin: Keypair,
+    admin: TransactionSigner,
     mode: string,
-    globalConfigOverride?: PublicKey,
-  ): Promise<TransactionInstruction[]> {
-    const ixs = this.withdrawHostTipIx(admin.publicKey, globalConfigOverride);
+    globalConfigOverride?: Address,
+  ): Promise<Instruction[]> {
+    const ixs = await this.withdrawHostTipIx(admin, globalConfigOverride);
 
     const log =
       "Withdraw host tip: " +
       this._globalConfig.toString() +
       " with admin " +
-      admin.publicKey.toBase58();
+      admin.address;
 
     const sig = await this.processTxn(admin, ixs, mode, log, []);
 
@@ -2833,10 +2926,8 @@ export class LimoClient {
    * @param mints - an array of mints
    * @returns a PubkeyHashMap of the mints and number of decimals
    */
-  async getMintDecimals(
-    mints: PublicKey[],
-  ): Promise<PubkeyHashMap<PublicKey, number>> {
-    const mintDecimals = new PubkeyHashMap<PublicKey, number>();
+  async getMintDecimals(mints: Address[]): Promise<Map<Address, number>> {
+    const mintDecimals = new Map<Address, number>();
     for (const mint of mints) {
       mintDecimals.set(mint, await getMintDecimals(this._connection, mint));
     }
@@ -2847,13 +2938,13 @@ export class LimoClient {
    * Get the number of decimals for all mints in all of the order states
    * @returns a PubkeyHashMap of the mints and number of decimals
    */
-  async getAllMintDecimals(): Promise<PubkeyHashMap<PublicKey, number>> {
+  async getAllMintDecimals(): Promise<Map<Address, number>> {
     const allOrders = await this.getAllOrdersStateAndAddressWithFilters(
       [],
       undefined,
       false,
     );
-    const mints: PublicKey[] = [];
+    const mints: Address[] = [];
     for (const order of allOrders) {
       mints.push(order.state.inputMint);
       mints.push(order.state.outputMint);
@@ -2862,10 +2953,12 @@ export class LimoClient {
     return await this.getMintDecimals(mints);
   }
 
-  async getMintsProgramOwners(mints: PublicKey[]): Promise<PublicKey[]> {
-    const mintAccounts = await this._connection.getMultipleAccountsInfo(mints);
+  async getMintsProgramOwners(mints: Address[]): Promise<Address[]> {
+    const mintAccounts = await this._connection
+      .getMultipleAccounts(mints)
+      .send();
 
-    const mintProgramIds = mintAccounts.map((mintAccount) => {
+    const mintProgramIds = mintAccounts.value.map((mintAccount) => {
       if (!mintAccount) {
         throw new Error("Mint not found");
       }
@@ -2883,30 +2976,41 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async executeTransaction(
-    ix: TransactionInstruction[],
-    signer: Keypair,
-    extraSigners: Signer[] = [],
-  ): Promise<TransactionSignature> {
-    const tx = new Transaction();
-    const { blockhash } = await this._connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = signer.publicKey;
-    tx.add(...ix);
+    instructions: Instruction[],
+    signer: TransactionSigner,
+    extraSigners: TransactionSigner[] = [],
+  ): Promise<string> {
+    const { value: latestBlockhash } = await this._connection
+      .getLatestBlockhash()
+      .send();
 
-    const sig: TransactionSignature = await sendAndConfirmTransaction(
-      this._connection,
-      tx,
-      [signer, ...extraSigners],
-      { commitment: "confirmed" },
+    const transactionMessage = pipe(
+      createTransactionMessage({ version: 0 }), // Create transaction message
+      (tx) => setTransactionMessageFeePayerSigner(signer, tx),
+      (tx) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+      (tx) => appendTransactionMessageInstructions(instructions, tx),
     );
 
-    return sig;
+    const transactionsMessageWithSigners = extraSigners
+      ? addSignersToTransactionMessage(extraSigners, transactionMessage)
+      : transactionMessage;
+
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionsMessageWithSigners,
+    );
+
+    await sendAndConfirmTransactionFactory({
+      rpc: this._connection,
+      rpcSubscriptions: this._subscription,
+    })(signedTransaction, { commitment: "confirmed" });
+
+    return getSignatureFromTransaction(signedTransaction);
   }
 
   /**
    * Process a transaction based on the execution mode
    * @param admin - the admin keypair
-   * @param ixs - the transaction instructions
+   * @param instructions - the transaction instructions
    * @param mode - the execution mode (simulate/execute/multisig)
    * @param debugMessage - the debug message
    * @param extraSigners - the extra signers
@@ -2915,28 +3019,41 @@ export class LimoClient {
    * @returns the transaction signature
    */
   async processTxn(
-    admin: Keypair,
-    ixs: TransactionInstruction[],
+    admin: TransactionSigner,
+    instructions: Instruction[],
     mode: string,
     debugMessage?: string,
-    extraSigners?: Signer[],
+    extraSigners?: TransactionSigner[],
     computeUnits: number = 200_000,
     priorityFeeLamports: number = 10000,
-  ): Promise<TransactionSignature> {
+  ): Promise<string> {
     if (mode === "multisig" || mode === "simulate") {
-      console.log("asdsa");
-      const { blockhash } = await this._connection.getLatestBlockhash();
-      const txn = new Transaction();
-      txn.add(...ixs);
-      txn.recentBlockhash = blockhash;
-      txn.feePayer = admin.publicKey;
+      const { value: latestBlockhash } = await this._connection
+        .getLatestBlockhash()
+        .send();
+
+      const transactionMessage = pipe(
+        createTransactionMessage({ version: 0 }), // Create transaction message
+        (tx) => setTransactionMessageFeePayerSigner(admin, tx),
+        (tx) =>
+          setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, tx),
+        (tx) => appendTransactionMessageInstructions(instructions, tx),
+      );
+
+      const transactionsMessageWithSigners = extraSigners
+        ? addSignersToTransactionMessage(extraSigners, transactionMessage)
+        : transactionMessage;
+
+      const signedTransaction = await signTransactionMessageWithSigners(
+        transactionsMessageWithSigners,
+      );
 
       // if simulate is true, always simulate
       if (mode === "simulate") {
-        await printSimulateTx(this._connection, txn);
+        await printSimulateTx(this._connection, signedTransaction);
       } else {
         // if simulate is false (multisig is true)
-        await printMultisigTx(txn);
+        await printMultisigTx(signedTransaction);
       }
 
       return "";
@@ -2949,7 +3066,7 @@ export class LimoClient {
       );
 
       const sig = await this.executeTransaction(
-        [...priorityFeeIxs, ...ixs],
+        [...priorityFeeIxs, ...instructions],
         admin,
         extraSigners,
       );
@@ -2974,34 +3091,37 @@ export class LimoClient {
    * @param amountToDepositLamports - the amount to deposit in lamports
    * @returns the create, fill, and close instructions, toghether with the ata
    */
-  getInitIfNeededWSOLCreateAndCloseIxs(
-    owner: PublicKey,
-    payer: PublicKey,
+  async getInitIfNeededWSOLCreateAndCloseIxs(
+    owner: TransactionSigner,
+    payer: TransactionSigner,
     amountToDepositLamports?: BN,
-  ): {
-    createIxs: TransactionInstruction[];
-    fillIxs: TransactionInstruction[];
-    closeIx: TransactionInstruction[];
-    ata: PublicKey;
-  } {
-    const createIxs: TransactionInstruction[] = [];
-    const { ata, createAtaIx } = createAtaIdempotent(
-      owner,
+  ): Promise<{
+    createIxs: Instruction[];
+    fillIxs: Instruction[];
+    closeIx: Instruction[];
+    ata: Address;
+  }> {
+    const createIxs: Instruction[] = [];
+    const { ata, createAtaIx } = await createAtaIdempotent(
+      owner.address,
       payer,
       WRAPPED_SOL_MINT,
-      TOKEN_PROGRAM_ID,
     );
     createIxs.push(createAtaIx);
-    const fillIxs: TransactionInstruction[] = [];
-    if (amountToDepositLamports && payer.equals(owner)) {
+    const fillIxs: Instruction[] = [];
+    if (amountToDepositLamports && payer === owner) {
       fillIxs.push(
         ...this.getDepositWsolIxns(owner, ata, amountToDepositLamports),
       );
     }
-    const closeWsolAtaIxn: TransactionInstruction[] = [];
-    if (payer.equals(owner)) {
+    const closeWsolAtaIxn: Instruction[] = [];
+    if (payer === owner) {
       closeWsolAtaIxn.push(
-        createCloseAccountInstruction(ata, owner, owner, [], TOKEN_PROGRAM_ID),
+        getCloseAccountInstruction({
+          account: ata,
+          destination: owner.address,
+          owner: owner,
+        }),
       );
     }
 
@@ -3021,51 +3141,33 @@ export class LimoClient {
    * @returns the transaction instructions
    */
   getDepositWsolIxns(
-    owner: PublicKey,
-    ata: PublicKey,
+    owner: TransactionSigner,
+    ata: Address,
     amountLamports: BN,
-  ): TransactionInstruction[] {
-    const ixns: TransactionInstruction[] = [];
+  ): Instruction[] {
+    const ixns: Instruction[] = [];
 
     // Transfer to WSOL ata
     ixns.push(
-      SystemProgram.transfer({
-        fromPubkey: owner,
-        toPubkey: ata,
-        lamports: BigInt(amountLamports.toString()),
+      getTransferSolInstruction({
+        source: owner,
+        destination: ata,
+        amount: BigInt(amountLamports.toString()),
       }),
     );
 
     // Sync wrapped SOL
-    ixns.push(
-      new TransactionInstruction({
-        keys: [
-          {
-            pubkey: ata,
-            isSigner: false,
-            isWritable: true,
-          },
-        ],
-        data: Buffer.from(new Uint8Array([17])),
-        programId: TOKEN_PROGRAM_ID,
-      }),
-    );
+    ixns.push({
+      accounts: [
+        {
+          address: ata,
+          role: AccountRole.WRITABLE,
+        },
+      ],
+      data: new Uint8Array([17]),
+      programAddress: TOKEN_PROGRAM_ADDRESS,
+    } satisfies Instruction);
 
     return ixns;
   }
-}
-
-export function decodeLimoInstruction(
-  instructionData: Buffer,
-  programId?: PublicKey,
-): Instruction | null {
-  const limoProgram = new Program(
-    LIMO_IDL as Idl,
-    programId ? programId : PROGRAM_ID,
-  );
-
-  const coder = new BorshInstructionCoder(limoProgram.idl);
-  const decodedInstruction = coder.decode(instructionData);
-
-  return decodedInstruction;
 }

@@ -1,12 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
+
+export const DISCRIMINATOR = Buffer.from([
+  163, 157, 174, 93, 28, 127, 250, 136,
+]);
 
 export interface AssertUserSwapBalancesEndArgs {
   maxInputAmountChange: BN;
@@ -14,16 +25,16 @@ export interface AssertUserSwapBalancesEndArgs {
 }
 
 export interface AssertUserSwapBalancesEndAccounts {
-  maker: PublicKey;
-  inputTa: PublicKey;
-  outputTa: PublicKey;
-  userSwapBalanceState: PublicKey;
-  systemProgram: PublicKey;
-  rent: PublicKey;
-  sysvarInstructions: PublicKey;
+  maker: TransactionSigner;
+  inputTa: Address;
+  outputTa: Address;
+  userSwapBalanceState: Address;
+  systemProgram: Address;
+  rent: Address;
+  sysvarInstructions: Address;
 }
 
-export const layout = borsh.struct([
+export const layout = borsh.struct<AssertUserSwapBalancesEndArgs>([
   borsh.u64("maxInputAmountChange"),
   borsh.u64("minOutputAmountChange"),
 ]);
@@ -31,22 +42,19 @@ export const layout = borsh.struct([
 export function assertUserSwapBalancesEnd(
   args: AssertUserSwapBalancesEndArgs,
   accounts: AssertUserSwapBalancesEndAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.maker, isSigner: true, isWritable: true },
-    { pubkey: accounts.inputTa, isSigner: false, isWritable: false },
-    { pubkey: accounts.outputTa, isSigner: false, isWritable: false },
-    {
-      pubkey: accounts.userSwapBalanceState,
-      isSigner: false,
-      isWritable: true,
-    },
-    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.rent, isSigner: false, isWritable: false },
-    { pubkey: accounts.sysvarInstructions, isSigner: false, isWritable: false },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
+    { address: accounts.maker.address, role: 3, signer: accounts.maker },
+    { address: accounts.inputTa, role: 0 },
+    { address: accounts.outputTa, role: 0 },
+    { address: accounts.userSwapBalanceState, role: 1 },
+    { address: accounts.systemProgram, role: 0 },
+    { address: accounts.rent, role: 0 },
+    { address: accounts.sysvarInstructions, role: 0 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([163, 157, 174, 93, 28, 127, 250, 136]);
   const buffer = Buffer.alloc(1000);
   const len = layout.encode(
     {
@@ -55,7 +63,7 @@ export function assertUserSwapBalancesEnd(
     },
     buffer,
   );
-  const data = Buffer.concat([identifier, buffer]).slice(0, 8 + len);
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = Buffer.concat([DISCRIMINATOR, buffer]).slice(0, 8 + len);
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

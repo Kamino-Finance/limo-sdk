@@ -14,7 +14,7 @@
     "build:test": "tsc --project ./tests/tsconfig.json",
     "build:watch": "tsc -w",
     "cli": "yarn tsx src/client.ts",
-    "test": "DEBUG=true yarn build:test && npx ts-mocha ./tests/**/tests_*.ts --parallel --exit",
+    "test": "DEBUG=true yarn build:test && npx ts-mocha ./tests/**/tests_*.ts --exit --reporter spec",
     "start-validator": "solana-test-validator --bpf-program LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF ../target/deploy/limo.so --bpf-program PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou ./deps/express_relay.so --reset --quiet"
   },
   "repository": {
@@ -37,9 +37,10 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.28.0",
     "@coral-xyz/borsh": "^0.28.0",
-    "@solana/spl-token": "^0.4.9",
-    "@solana/web3.js": "^1.95.5",
-    "base58-js": "1.0.5",
+    "@solana-program/compute-budget": "^0.8.0",
+    "@solana-program/token": "^0.5.1",
+    "@solana-program/token-2022": "^0.4.2",
+    "@solana/kit": "^2.3.0",
     "bn.js": "^5.2.1",
     "bs58": "^4.0.1",
     "commander": "^9.3.0",

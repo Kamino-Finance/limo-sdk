@@ -1,32 +1,46 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
+export const DISCRIMINATOR = Buffer.from([140, 246, 105, 165, 80, 85, 143, 18]);
+
 export interface WithdrawHostTipAccounts {
-  adminAuthority: PublicKey;
-  globalConfig: PublicKey;
-  pdaAuthority: PublicKey;
-  systemProgram: PublicKey;
+  adminAuthority: TransactionSigner;
+  globalConfig: Address;
+  pdaAuthority: Address;
+  systemProgram: Address;
 }
 
 export function withdrawHostTip(
   accounts: WithdrawHostTipAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.adminAuthority, isSigner: true, isWritable: true },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
-    { pubkey: accounts.pdaAuthority, isSigner: false, isWritable: true },
-    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
+    {
+      address: accounts.adminAuthority.address,
+      role: 3,
+      signer: accounts.adminAuthority,
+    },
+    { address: accounts.globalConfig, role: 1 },
+    { address: accounts.pdaAuthority, role: 1 },
+    { address: accounts.systemProgram, role: 0 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([140, 246, 105, 165, 80, 85, 143, 18]);
-  const data = identifier;
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = DISCRIMINATOR;
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

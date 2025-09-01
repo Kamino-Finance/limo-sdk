@@ -1,12 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
+
+export const DISCRIMINATOR = Buffer.from([
+  206, 242, 215, 187, 134, 33, 224, 148,
+]);
 
 export interface FlashTakeOrderEndArgs {
   inputAmount: BN;
@@ -15,32 +26,32 @@ export interface FlashTakeOrderEndArgs {
 }
 
 export interface FlashTakeOrderEndAccounts {
-  taker: PublicKey;
-  maker: PublicKey;
-  globalConfig: PublicKey;
-  pdaAuthority: PublicKey;
-  order: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  inputVault: PublicKey;
-  takerInputAta: PublicKey;
-  takerOutputAta: PublicKey;
-  intermediaryOutputTokenAccount: PublicKey;
-  makerOutputAta: PublicKey;
-  expressRelay: PublicKey;
-  expressRelayMetadata: PublicKey;
-  sysvarInstructions: PublicKey;
-  permission: PublicKey;
-  configRouter: PublicKey;
-  inputTokenProgram: PublicKey;
-  outputTokenProgram: PublicKey;
-  systemProgram: PublicKey;
-  rent: PublicKey;
-  eventAuthority: PublicKey;
-  program: PublicKey;
+  taker: TransactionSigner;
+  maker: Address;
+  globalConfig: Address;
+  pdaAuthority: Address;
+  order: Address;
+  inputMint: Address;
+  outputMint: Address;
+  inputVault: Address;
+  takerInputAta: Address;
+  takerOutputAta: Address;
+  intermediaryOutputTokenAccount: Option<Address>;
+  makerOutputAta: Option<Address>;
+  expressRelay: Address;
+  expressRelayMetadata: Address;
+  sysvarInstructions: Address;
+  permission: Option<Address>;
+  configRouter: Address;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
+  systemProgram: Address;
+  rent: Address;
+  eventAuthority: Address;
+  program: Address;
 }
 
-export const layout = borsh.struct([
+export const layout = borsh.struct<FlashTakeOrderEndArgs>([
   borsh.u64("inputAmount"),
   borsh.u64("minOutputAmount"),
   borsh.u64("tipAmountPermissionlessTaking"),
@@ -49,42 +60,41 @@ export const layout = borsh.struct([
 export function flashTakeOrderEnd(
   args: FlashTakeOrderEndArgs,
   accounts: FlashTakeOrderEndAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.taker, isSigner: true, isWritable: true },
-    { pubkey: accounts.maker, isSigner: false, isWritable: true },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
-    { pubkey: accounts.pdaAuthority, isSigner: false, isWritable: true },
-    { pubkey: accounts.order, isSigner: false, isWritable: true },
-    { pubkey: accounts.inputMint, isSigner: false, isWritable: false },
-    { pubkey: accounts.outputMint, isSigner: false, isWritable: false },
-    { pubkey: accounts.inputVault, isSigner: false, isWritable: true },
-    { pubkey: accounts.takerInputAta, isSigner: false, isWritable: true },
-    { pubkey: accounts.takerOutputAta, isSigner: false, isWritable: true },
-    {
-      pubkey: accounts.intermediaryOutputTokenAccount,
-      isSigner: false,
-      isWritable: true,
-    },
-    { pubkey: accounts.makerOutputAta, isSigner: false, isWritable: true },
-    { pubkey: accounts.expressRelay, isSigner: false, isWritable: false },
-    {
-      pubkey: accounts.expressRelayMetadata,
-      isSigner: false,
-      isWritable: false,
-    },
-    { pubkey: accounts.sysvarInstructions, isSigner: false, isWritable: false },
-    { pubkey: accounts.permission, isSigner: false, isWritable: false },
-    { pubkey: accounts.configRouter, isSigner: false, isWritable: false },
-    { pubkey: accounts.inputTokenProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.outputTokenProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.rent, isSigner: false, isWritable: false },
-    { pubkey: accounts.eventAuthority, isSigner: false, isWritable: false },
-    { pubkey: accounts.program, isSigner: false, isWritable: false },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
+    { address: accounts.taker.address, role: 3, signer: accounts.taker },
+    { address: accounts.maker, role: 1 },
+    { address: accounts.globalConfig, role: 1 },
+    { address: accounts.pdaAuthority, role: 1 },
+    { address: accounts.order, role: 1 },
+    { address: accounts.inputMint, role: 0 },
+    { address: accounts.outputMint, role: 0 },
+    { address: accounts.inputVault, role: 1 },
+    { address: accounts.takerInputAta, role: 1 },
+    { address: accounts.takerOutputAta, role: 1 },
+    isSome(accounts.intermediaryOutputTokenAccount)
+      ? { address: accounts.intermediaryOutputTokenAccount.value, role: 1 }
+      : { address: programAddress, role: 0 },
+    isSome(accounts.makerOutputAta)
+      ? { address: accounts.makerOutputAta.value, role: 1 }
+      : { address: programAddress, role: 0 },
+    { address: accounts.expressRelay, role: 0 },
+    { address: accounts.expressRelayMetadata, role: 0 },
+    { address: accounts.sysvarInstructions, role: 0 },
+    isSome(accounts.permission)
+      ? { address: accounts.permission.value, role: 0 }
+      : { address: programAddress, role: 0 },
+    { address: accounts.configRouter, role: 0 },
+    { address: accounts.inputTokenProgram, role: 0 },
+    { address: accounts.outputTokenProgram, role: 0 },
+    { address: accounts.systemProgram, role: 0 },
+    { address: accounts.rent, role: 0 },
+    { address: accounts.eventAuthority, role: 0 },
+    { address: accounts.program, role: 0 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([206, 242, 215, 187, 134, 33, 224, 148]);
   const buffer = Buffer.alloc(1000);
   const len = layout.encode(
     {
@@ -94,7 +104,7 @@ export function flashTakeOrderEnd(
     },
     buffer,
   );
-  const data = Buffer.concat([identifier, buffer]).slice(0, 8 + len);
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = Buffer.concat([DISCRIMINATOR, buffer]).slice(0, 8 + len);
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

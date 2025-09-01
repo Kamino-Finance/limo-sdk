@@ -1,6 +1,5 @@
 #!/usr/bin/env npx ts-node
 
-import * as anchor from "@coral-xyz/anchor";
 import { Command } from "commander";
 import { initializeClient } from "./commands/utils";
 import {
@@ -12,7 +11,6 @@ import {
   setupAta,
   sleep,
 } from "./utils";
-import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import fs from "fs";
 import path from "path";
@@ -24,11 +22,11 @@ import {
 } from "./commands/initCommands";
 import dotenv from "dotenv";
 import {
-  placeOrder,
-  listOrders,
   getAllOrders,
-  permissionlessTakeOrder,
+  listOrders,
   listOrdersForUser,
+  permissionlessTakeOrder,
+  placeOrder,
 } from "./commands/orderCommands";
 import {
   updateGlobalConfig,
@@ -40,8 +38,9 @@ import {
   listenToOrderChangesForMaker,
   listenToOrderChangesForQuoteAndBase,
 } from "./commands/websocketCommands";
-import { Order } from "./rpc_client/accounts";
-import { LimoClient } from "./Limo";
+import { address } from "@solana/kit";
+import { generateKeyPairSigner } from "@solana/signers";
+
 dotenv.config({
   path: `../.env${process.env.ENV ? "." + process.env.ENV : ""}`,
 });
@@ -68,7 +67,7 @@ async function main() {
       "multisig - will print bs58 txn only, simulate - will print bs64 txn explorer link and simulation, execute - to execute txn",
     )
     .action(async ({ mint, mode }) => {
-      await initVault(new PublicKey(mint), mode);
+      await initVault(address(mint), mode);
     });
 
   commands
@@ -163,7 +162,7 @@ async function main() {
     )
     .action(async ({ order, amountToTake, amountTip, mode }) => {
       await permissionlessTakeOrder(
-        new PublicKey(order),
+        address(order),
         amountToTake,
         amountTip,
         mode,
@@ -174,7 +173,7 @@ async function main() {
     .command("list-orders-for-user")
     .requiredOption("--user <string>", "User address")
     .action(async ({ user }) => {
-      await listOrdersForUser(new PublicKey(user));
+      await listOrdersForUser(address(user));
     });
 
   commands
@@ -215,8 +214,8 @@ async function main() {
     .requiredOption("--base-mint <string>")
     .action(async ({ quoteMint, baseMint }) => {
       await listenToOrderChangesForQuoteAndBase(
-        new PublicKey(quoteMint),
-        new PublicKey(baseMint),
+        address(quoteMint),
+        address(baseMint),
       );
     });
 
@@ -224,7 +223,7 @@ async function main() {
     .command("listen-to-orders-changes-for-maker")
     .requiredOption("--maker <string>")
     .action(async ({ maker }) => {
-      await listenToOrderChangesForMaker(new PublicKey(maker));
+      await listenToOrderChangesForMaker(address(maker));
     });
 
   commands.command("get-all-orders").action(async ({}) => {
@@ -234,13 +233,13 @@ async function main() {
   commands.command("create-mint").action(async () => {
     const admin = process.env.ADMIN;
     const rpc = process.env.RPC_ENV;
-    const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
+    const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
 
-    const tokenMint = new anchor.web3.Keypair();
+    const tokenMint = await generateKeyPairSigner();
 
-    await createMintFromKeypair(env.provider, env.admin.publicKey, tokenMint);
+    await createMintFromKeypair(env.rpc, env.rpcWs, env.admin, tokenMint);
 
-    console.log("New mint: ", tokenMint.publicKey.toString());
+    console.log("New mint: ", tokenMint.address.toString());
 
     // create ./tmp folder if it doesn't exist
     if (!fs.existsSync("./tmp")) {
@@ -250,12 +249,12 @@ async function main() {
     const finalPath = path.resolve(
       process.cwd(),
       "tmp",
-      tokenMint.publicKey.toString() + ".json",
+      tokenMint.address.toString() + ".json",
     );
-    fs.writeFileSync(finalPath, tokenMint.secretKey);
+    fs.writeFileSync(finalPath, tokenMint.keyPair.privateKey);
     console.log(
       "Written to: ",
-      "./tmp/" + tokenMint.publicKey.toString() + ".json",
+      "./tmp/" + tokenMint.address.toString() + ".json",
     );
   });
 
@@ -265,14 +264,14 @@ async function main() {
     .option(`--cluster <string>`, "The Solana cluster to use")
     .option(`--mint <string>`, "The Mint to use")
     .action(async ({ admin, cluster, mint }) => {
-      const env = initializeClient(
+      const env = await initializeClient(
         cluster,
         admin,
-        getLimoProgramId(cluster),
+        getLimoProgramId(),
         false,
       );
-      const tokenMint = new PublicKey(mint);
-      const ata = await setupAta(env.provider, tokenMint, env.admin);
+      const tokenMint = address(mint);
+      const ata = await setupAta(env.rpc, env.rpcWs, tokenMint, env.admin);
       console.log("new ata: ", ata.toString());
     });
 
@@ -284,21 +283,24 @@ async function main() {
     .action(async ({ owner, mint, amount }) => {
       const admin = process.env.ADMIN;
       const rpc = process.env.RPC_ENV;
-      const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
+      const env = await initializeClient(
+        rpc!,
+        admin!,
+        getLimoProgramId(),
+        false,
+      );
 
-      const tokenMint = new PublicKey(mint);
+      const tokenMint = address(mint);
 
       const ownerAta = await setupAta(
-        env.provider,
+        env.rpc,
+        env.rpcWs,
         tokenMint,
         env.admin,
-        new PublicKey(owner),
+        address(owner),
       );
 
-      const mintDecimals = await getMintDecimals(
-        env.provider.connection,
-        tokenMint,
-      );
+      const mintDecimals = await getMintDecimals(env.rpc, tokenMint);
       const amountLamports = amountToLamportsDecimal(
         new Decimal(amount),
         mintDecimals,
@@ -309,7 +311,9 @@ async function main() {
 
       // Mint to ata
       await mintTo(
-        env.provider,
+        env.rpc,
+        env.rpcWs,
+        env.admin,
         tokenMint,
         ownerAta,
         amountLamports.toNumber(),
@@ -317,15 +321,14 @@ async function main() {
       );
 
       await sleep(2000);
-      const balance =
-        await env.provider.connection.getTokenAccountBalance(ownerAta);
+      const balance = await env.rpc.getTokenAccountBalance(ownerAta).send();
 
       console.log(
         "Minted",
         amount,
         tokenMint.toString(),
         "final balance:",
-        balance.value.uiAmount,
+        balance.value.uiAmountString,
       );
     });
 

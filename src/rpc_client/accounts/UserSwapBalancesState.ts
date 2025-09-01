@@ -1,6 +1,17 @@
-import { PublicKey, Connection } from "@solana/web3.js";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  address,
+  Address,
+  fetchEncodedAccount,
+  fetchEncodedAccounts,
+  GetAccountInfoApi,
+  GetMultipleAccountsApi,
+  Rpc,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
@@ -25,7 +36,7 @@ export class UserSwapBalancesState {
     140, 228, 152, 62, 231, 27, 245, 198,
   ]);
 
-  static readonly layout = borsh.struct([
+  static readonly layout = borsh.struct<UserSwapBalancesState>([
     borsh.u64("userLamports"),
     borsh.u64("inputTaBalance"),
     borsh.u64("outputTaBalance"),
@@ -38,38 +49,42 @@ export class UserSwapBalancesState {
   }
 
   static async fetch(
-    c: Connection,
-    address: PublicKey,
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetAccountInfoApi>,
+    address: Address,
+    programId: Address = PROGRAM_ID,
   ): Promise<UserSwapBalancesState | null> {
-    const info = await c.getAccountInfo(address);
+    const info = await fetchEncodedAccount(rpc, address);
 
-    if (info === null) {
+    if (!info.exists) {
       return null;
     }
-    if (!info.owner.equals(programId)) {
-      throw new Error("account doesn't belong to this program");
+    if (info.programAddress !== programId) {
+      throw new Error(
+        `UserSwapBalancesStateFields account ${address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+      );
     }
 
-    return this.decode(info.data);
+    return this.decode(Buffer.from(info.data));
   }
 
   static async fetchMultiple(
-    c: Connection,
-    addresses: PublicKey[],
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetMultipleAccountsApi>,
+    addresses: Address[],
+    programId: Address = PROGRAM_ID,
   ): Promise<Array<UserSwapBalancesState | null>> {
-    const infos = await c.getMultipleAccountsInfo(addresses);
+    const infos = await fetchEncodedAccounts(rpc, addresses);
 
     return infos.map((info) => {
-      if (info === null) {
+      if (!info.exists) {
         return null;
       }
-      if (!info.owner.equals(programId)) {
-        throw new Error("account doesn't belong to this program");
+      if (info.programAddress !== programId) {
+        throw new Error(
+          `UserSwapBalancesStateFields account ${info.address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+        );
       }
 
-      return this.decode(info.data);
+      return this.decode(Buffer.from(info.data));
     });
   }
 

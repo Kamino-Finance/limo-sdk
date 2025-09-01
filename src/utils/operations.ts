@@ -1,9 +1,7 @@
 import * as Instructions from "../rpc_client/instructions";
-import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
-
-import { TransactionInstruction } from "@solana/web3.js";
+import { UpdateOrderArgs } from "../rpc_client/instructions";
 import {
+  asOption,
   getAssociatedTokenAddress,
   getEventAuthorityPDA,
   getExpressRelayConfigRouterPDA,
@@ -11,50 +9,60 @@ import {
   getPdaAuthority,
   getTokenVaultPDA,
 } from "./utils";
-import { BN } from "@coral-xyz/anchor";
 import {
   UpdateGlobalConfigMode,
-  UpdateOrderMode,
   UpdateGlobalConfigModeKind,
+  UpdateOrderMode,
   UpdateOrderModeKind,
 } from "../rpc_client/types/index";
 import { GlobalConfig } from "../rpc_client/accounts";
-import { UpdateOrderArgs } from "../rpc_client/instructions";
+import {
+  Address,
+  getAddressEncoder,
+  Instruction,
+  TransactionSigner,
+} from "@solana/kit";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
+import {
+  SYSVAR_INSTRUCTIONS_ADDRESS,
+  SYSVAR_RENT_ADDRESS,
+} from "@solana/sysvars";
+import BN from "bn.js";
 
 export interface OrderParams {
-  quoteTokenMint: PublicKey;
-  baseTokenMint: PublicKey;
+  quoteTokenMint: Address;
+  baseTokenMint: Address;
   quoteTokenAmount: BN;
   baseTokenAmount: BN;
   side: "bid" | "ask";
 }
 
 export function initializeGlobalConfig(
-  adminAuthority: PublicKey,
-  globalConfig: PublicKey,
-  pdaAuthority: PublicKey,
-  programId: PublicKey,
-): TransactionInstruction {
+  adminAuthority: TransactionSigner,
+  globalConfig: Address,
+  pdaAuthority: Address,
+  programId: Address,
+): Instruction {
   let accounts: Instructions.InitializeGlobalConfigAccounts = {
     adminAuthority,
     pdaAuthority,
     globalConfig,
   };
 
-  let ix = Instructions.initializeGlobalConfig(accounts, programId);
+  let ix = Instructions.initializeGlobalConfig(accounts, [], programId);
 
   return ix;
 }
 
-export function initializeVault(
-  owner: PublicKey,
-  globalConfig: PublicKey,
-  mint: PublicKey,
-  programId: PublicKey,
-  mintProgramId: PublicKey,
-): TransactionInstruction {
-  let vault = getTokenVaultPDA(programId, globalConfig, mint);
-  let pdaAuthority = getPdaAuthority(programId, globalConfig);
+export async function initializeVault(
+  owner: TransactionSigner,
+  globalConfig: Address,
+  mint: Address,
+  programAddress: Address,
+  mintProgramId: Address,
+): Promise<Instruction> {
+  let vault = await getTokenVaultPDA(programAddress, globalConfig, mint);
+  let pdaAuthority = await getPdaAuthority(programAddress, globalConfig);
   let accounts: Instructions.InitializeVaultAccounts = {
     payer: owner,
     globalConfig,
@@ -62,35 +70,35 @@ export function initializeVault(
     mint,
     vault,
     tokenProgram: mintProgramId,
-    systemProgram: anchor.web3.SystemProgram.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
   };
 
-  let ix = Instructions.initializeVault(accounts, programId);
+  let ix = Instructions.initializeVault(accounts, [], programAddress);
 
   return ix;
 }
 
-export function createOrder(
-  maker: PublicKey,
-  globalConfig: PublicKey,
-  order: PublicKey,
+export async function createOrder(
+  maker: TransactionSigner,
+  globalConfig: Address,
+  order: Address,
   orderParams: OrderParams,
-  programId: PublicKey,
-  baseTokenMintProgramId: PublicKey,
-  quoteTokenMintProgramId: PublicKey,
-): TransactionInstruction {
-  let quoteTokenVault = getTokenVaultPDA(
-    programId,
+  programAddress: Address,
+  baseTokenMintProgramId: Address,
+  quoteTokenMintProgramId: Address,
+): Promise<Instruction> {
+  let quoteTokenVault = await getTokenVaultPDA(
+    programAddress,
     globalConfig,
     orderParams.quoteTokenMint,
   );
-  let baseTokenVault = getTokenVaultPDA(
-    programId,
+  let baseTokenVault = await getTokenVaultPDA(
+    programAddress,
     globalConfig,
     orderParams.baseTokenMint,
   );
 
-  let pdaAuthority = getPdaAuthority(programId, globalConfig);
+  let pdaAuthority = await getPdaAuthority(programAddress, globalConfig);
   let accounts: Instructions.CreateOrderAccounts = {
     maker,
     globalConfig,
@@ -106,13 +114,13 @@ export function createOrder(
         : orderParams.baseTokenMint,
     makerAta:
       orderParams.side === "bid"
-        ? getAssociatedTokenAddress(
-            maker,
+        ? await getAssociatedTokenAddress(
+            maker.address,
             orderParams.baseTokenMint,
             baseTokenMintProgramId,
           )
-        : getAssociatedTokenAddress(
-            maker,
+        : await getAssociatedTokenAddress(
+            maker.address,
             orderParams.quoteTokenMint,
             quoteTokenMintProgramId,
           ),
@@ -125,9 +133,9 @@ export function createOrder(
       orderParams.side === "bid"
         ? quoteTokenMintProgramId
         : baseTokenMintProgramId,
-    eventAuthority: getEventAuthorityPDA(programId),
-    program: programId,
-    systemProgram: SystemProgram.programId,
+    eventAuthority: await getEventAuthorityPDA(programAddress),
+    program: programAddress,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
   };
 
   let args: Instructions.CreateOrderArgs = {
@@ -143,19 +151,19 @@ export function createOrder(
     ),
     orderType: orderParams.side === "bid" ? 0 : 1,
   };
-  let ix = Instructions.createOrder(args, accounts, programId);
+  let ix = Instructions.createOrder(args, accounts, [], programAddress);
 
   return ix;
 }
 
 export function updateOrder(
   mode: UpdateOrderModeKind,
-  value: boolean | PublicKey,
-  maker: PublicKey,
-  globalConfig: PublicKey,
-  order: PublicKey,
-  programId: PublicKey,
-): TransactionInstruction {
+  value: boolean | Address,
+  maker: TransactionSigner,
+  globalConfig: Address,
+  order: Address,
+  programAddress: Address,
+): Instruction {
   let args: UpdateOrderArgs = {
     mode: mode.discriminator,
     value: encodedUpdateOrderValue(mode, value),
@@ -166,34 +174,37 @@ export function updateOrder(
     order,
   };
 
-  let ix = Instructions.updateOrder(args, accounts, programId);
+  let ix = Instructions.updateOrder(args, accounts, [], programAddress);
 
   return ix;
 }
 
-export function takeOrder(params: {
-  taker: PublicKey;
-  maker: PublicKey;
-  globalConfig: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  order: PublicKey;
+export async function takeOrder(params: {
+  taker: TransactionSigner;
+  maker: Address;
+  globalConfig: Address;
+  inputMint: Address;
+  outputMint: Address;
+  order: Address;
   inputAmountLamports: BN;
   minOutputAmountLamports: BN;
-  programId: PublicKey;
-  expressRelayProgramId: PublicKey;
-  takerInputAta: PublicKey;
-  takerOutputAta: PublicKey;
-  intermediaryOutputTokenAccount: PublicKey;
-  makerOutputAta: PublicKey;
-  inputTokenProgram: PublicKey;
-  outputTokenProgram: PublicKey;
+  programAddress: Address;
+  expressRelayProgramId: Address;
+  takerInputAta: Address;
+  takerOutputAta: Address;
+  intermediaryOutputTokenAccount?: Address;
+  makerOutputAta?: Address;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
   permissionlessTipLamports: BN;
   permissionless: boolean;
-}): TransactionInstruction {
-  let pdaAuthority = getPdaAuthority(params.programId, params.globalConfig);
-  let inputVault = getTokenVaultPDA(
-    params.programId,
+}): Promise<Instruction> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
+  let inputVault = await getTokenVaultPDA(
+    params.programAddress,
     params.globalConfig,
     params.inputMint,
   );
@@ -208,25 +219,27 @@ export function takeOrder(params: {
     outputMint: params.outputMint,
     inputVault,
     expressRelay: params.expressRelayProgramId,
-    expressRelayMetadata: getExpressRelayMetadataPDA(
+    expressRelayMetadata: await getExpressRelayMetadataPDA(
       params.expressRelayProgramId,
     ),
-    permission: params.permissionless ? params.programId : params.order,
-    configRouter: getExpressRelayConfigRouterPDA(
+    permission: asOption(params.permissionless ? undefined : params.order),
+    configRouter: await getExpressRelayConfigRouterPDA(
       params.expressRelayProgramId,
       pdaAuthority,
     ),
-    sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     takerInputAta: params.takerInputAta,
-    intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
+    intermediaryOutputTokenAccount: asOption(
+      params.intermediaryOutputTokenAccount,
+    ),
     takerOutputAta: params.takerOutputAta,
-    makerOutputAta: params.makerOutputAta,
+    makerOutputAta: asOption(params.makerOutputAta),
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
-    systemProgram: SystemProgram.programId,
-    rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-    eventAuthority: getEventAuthorityPDA(params.programId),
-    program: params.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    rent: SYSVAR_RENT_ADDRESS,
+    eventAuthority: await getEventAuthorityPDA(params.programAddress),
+    program: params.programAddress,
   };
 
   let args: Instructions.TakeOrderArgs = {
@@ -234,34 +247,37 @@ export function takeOrder(params: {
     minOutputAmount: params.minOutputAmountLamports,
     tipAmountPermissionlessTaking: params.permissionlessTipLamports,
   };
-  let ix = Instructions.takeOrder(args, accounts, params.programId);
+  let ix = Instructions.takeOrder(args, accounts, [], params.programAddress);
 
   return ix;
 }
 
-export function flashTakeOrder(params: {
-  taker: PublicKey;
-  maker: PublicKey;
-  globalConfig: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  order: PublicKey;
+export async function flashTakeOrder(params: {
+  taker: TransactionSigner;
+  maker: Address;
+  globalConfig: Address;
+  inputMint: Address;
+  outputMint: Address;
+  order: Address;
   inputAmountLamports: BN;
   minOutputAmountLamports: BN;
-  programId: PublicKey;
-  expressRelayProgramId: PublicKey;
-  takerInputAta: PublicKey;
-  takerOutputAta: PublicKey;
-  intermediaryOutputTokenAccount: PublicKey;
-  makerOutputAta: PublicKey;
-  inputTokenProgram: PublicKey;
-  outputTokenProgram: PublicKey;
+  programAddress: Address;
+  expressRelayProgramId: Address;
+  takerInputAta: Address;
+  takerOutputAta: Address;
+  intermediaryOutputTokenAccount: Address | undefined;
+  makerOutputAta: Address | undefined;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
   permissionlessTipLamports: BN | undefined;
   permissionless: boolean;
-}): { startIx: TransactionInstruction; endIx: TransactionInstruction } {
-  let pdaAuthority = getPdaAuthority(params.programId, params.globalConfig);
-  let inputVault = getTokenVaultPDA(
-    params.programId,
+}): Promise<{ startIx: Instruction; endIx: Instruction }> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
+  let inputVault = await getTokenVaultPDA(
+    params.programAddress,
     params.globalConfig,
     params.inputMint,
   );
@@ -276,25 +292,27 @@ export function flashTakeOrder(params: {
     outputMint: params.outputMint,
     inputVault,
     expressRelay: params.expressRelayProgramId,
-    expressRelayMetadata: getExpressRelayMetadataPDA(
+    expressRelayMetadata: await getExpressRelayMetadataPDA(
       params.expressRelayProgramId,
     ),
-    permission: params.permissionless ? params.programId : params.order,
-    configRouter: getExpressRelayConfigRouterPDA(
+    permission: asOption(params.permissionless ? undefined : params.order),
+    configRouter: await getExpressRelayConfigRouterPDA(
       params.expressRelayProgramId,
       pdaAuthority,
     ),
-    sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     takerInputAta: params.takerInputAta,
     takerOutputAta: params.takerOutputAta,
-    intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
-    makerOutputAta: params.makerOutputAta,
+    intermediaryOutputTokenAccount: asOption(
+      params.intermediaryOutputTokenAccount,
+    ),
+    makerOutputAta: asOption(params.makerOutputAta),
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
-    systemProgram: SystemProgram.programId,
-    rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-    eventAuthority: getEventAuthorityPDA(params.programId),
-    program: params.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    rent: SYSVAR_RENT_ADDRESS,
+    eventAuthority: await getEventAuthorityPDA(params.programAddress),
+    program: params.programAddress,
   };
 
   let startArgs: Instructions.FlashTakeOrderStartArgs = {
@@ -306,7 +324,8 @@ export function flashTakeOrder(params: {
   let startIx = Instructions.flashTakeOrderStart(
     startArgs,
     startAccounts,
-    params.programId,
+    [],
+    params.programAddress,
   );
 
   let endAccounts: Instructions.FlashTakeOrderEndAccounts = {
@@ -319,25 +338,27 @@ export function flashTakeOrder(params: {
     outputMint: params.outputMint,
     inputVault,
     expressRelay: params.expressRelayProgramId,
-    expressRelayMetadata: getExpressRelayMetadataPDA(
+    expressRelayMetadata: await getExpressRelayMetadataPDA(
       params.expressRelayProgramId,
     ),
-    permission: params.permissionless ? params.programId : params.order,
-    configRouter: getExpressRelayConfigRouterPDA(
+    permission: asOption(params.permissionless ? undefined : params.order),
+    configRouter: await getExpressRelayConfigRouterPDA(
       params.expressRelayProgramId,
       pdaAuthority,
     ),
-    sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     takerInputAta: params.takerInputAta,
     takerOutputAta: params.takerOutputAta,
-    intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
-    makerOutputAta: params.makerOutputAta,
+    intermediaryOutputTokenAccount: asOption(
+      params.intermediaryOutputTokenAccount,
+    ),
+    makerOutputAta: asOption(params.makerOutputAta),
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
-    systemProgram: SystemProgram.programId,
-    rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-    eventAuthority: getEventAuthorityPDA(params.programId),
-    program: params.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    rent: SYSVAR_RENT_ADDRESS,
+    eventAuthority: await getEventAuthorityPDA(params.programAddress),
+    program: params.programAddress,
   };
 
   let endArgs: Instructions.FlashTakeOrderEndArgs = {
@@ -349,7 +370,8 @@ export function flashTakeOrder(params: {
   let endIx = Instructions.flashTakeOrderEnd(
     endArgs,
     endAccounts,
-    params.programId,
+    [],
+    params.programAddress,
   );
 
   return {
@@ -358,19 +380,22 @@ export function flashTakeOrder(params: {
   };
 }
 
-export function closeOrderAndClaimTip(params: {
-  maker: PublicKey;
-  globalConfig: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  order: PublicKey;
-  programId: PublicKey;
-  makerInputAta: PublicKey;
-  inputTokenProgram: PublicKey;
-}): TransactionInstruction {
-  let pdaAuthority = getPdaAuthority(params.programId, params.globalConfig);
-  let inputVault = getTokenVaultPDA(
-    params.programId,
+export async function closeOrderAndClaimTip(params: {
+  maker: TransactionSigner;
+  globalConfig: Address;
+  inputMint: Address;
+  outputMint: Address;
+  order: Address;
+  programAddress: Address;
+  makerInputAta: Address;
+  inputTokenProgram: Address;
+}): Promise<Instruction> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
+  let inputVault = await getTokenVaultPDA(
+    params.programAddress,
     params.globalConfig,
     params.inputMint,
   );
@@ -385,42 +410,49 @@ export function closeOrderAndClaimTip(params: {
     makerInputAta: params.makerInputAta,
     inputVault,
     inputTokenProgram: params.inputTokenProgram,
-    systemProgram: SystemProgram.programId,
-    eventAuthority: getEventAuthorityPDA(params.programId),
-    program: params.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    eventAuthority: await getEventAuthorityPDA(params.programAddress),
+    program: params.programAddress,
   };
 
-  let ix = Instructions.closeOrderAndClaimTip(accounts, params.programId);
+  let ix = Instructions.closeOrderAndClaimTip(
+    accounts,
+    [],
+    params.programAddress,
+  );
 
   return ix;
 }
 
-export function withdrawHostTipIx(params: {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  programId: PublicKey;
-}): TransactionInstruction {
-  let pdaAuthority = getPdaAuthority(params.programId, params.globalConfig);
+export async function withdrawHostTipIx(params: {
+  admin: TransactionSigner;
+  globalConfig: Address;
+  programAddress: Address;
+}): Promise<Instruction> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
 
   let accounts: Instructions.WithdrawHostTipAccounts = {
     adminAuthority: params.admin,
     globalConfig: params.globalConfig,
     pdaAuthority,
-    systemProgram: SystemProgram.programId,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
   };
 
-  let ix = Instructions.withdrawHostTip(accounts, params.programId);
+  let ix = Instructions.withdrawHostTip(accounts, [], params.programAddress);
 
   return ix;
 }
 
 export function updateGlobalConfigIx(
-  admin: PublicKey,
-  globalConfig: PublicKey,
+  admin: TransactionSigner,
+  globalConfig: Address,
   mode: UpdateGlobalConfigModeKind,
-  value: number | PublicKey,
-  programId: PublicKey,
-): TransactionInstruction {
+  value: number | Address,
+  programAddress: Address,
+): Instruction {
   let accounts: Instructions.UpdateGlobalConfigAccounts = {
     adminAuthority: admin,
     globalConfig,
@@ -431,29 +463,32 @@ export function updateGlobalConfigIx(
     value: encodedUpdateGlobalConfigValue(mode, value),
   };
 
-  let ix = Instructions.updateGlobalConfig(args, accounts, programId);
+  let ix = Instructions.updateGlobalConfig(args, accounts, [], programAddress);
 
   return ix;
 }
 
 export function updateGlobalConfigAdminIx(
-  globalConfigAddress: PublicKey,
+  admin: TransactionSigner,
+  globalConfigAddress: Address,
   globalConfig: GlobalConfig,
-  programId: PublicKey,
-): TransactionInstruction {
+  programAddress: Address,
+): Instruction {
   let accounts: Instructions.UpdateGlobalConfigAdminAccounts = {
-    adminAuthorityCached: globalConfig.adminAuthorityCached,
+    // TODO do we really need a cached admin authority? If yes, we need to cache the keypair not just the address
+    //adminAuthorityCached: createNoopSigner(globalConfig.adminAuthorityCached),
+    adminAuthorityCached: admin,
     globalConfig: globalConfigAddress,
   };
 
-  let ix = Instructions.updateGlobalConfigAdmin(accounts, programId);
+  let ix = Instructions.updateGlobalConfigAdmin(accounts, [], programAddress);
 
   return ix;
 }
 
 function encodedUpdateOrderValue(
   mode: UpdateOrderModeKind,
-  value: boolean | PublicKey,
+  value: boolean | Address,
 ): Uint8Array {
   let valueBoolean: number;
   let valuePublicKey: Buffer;
@@ -465,7 +500,9 @@ function encodedUpdateOrderValue(
       valueData.writeUIntLE(valueBoolean, 0, 1);
       break;
     case UpdateOrderMode.UpdateCounterparty.discriminator:
-      valuePublicKey = (value as PublicKey).toBuffer();
+      valuePublicKey = Buffer.from(
+        getAddressEncoder().encode(value as Address),
+      );
       valueData = Buffer.alloc(32);
       valuePublicKey.copy(valueData, 0);
       break;
@@ -477,11 +514,11 @@ function encodedUpdateOrderValue(
 
 function encodedUpdateGlobalConfigValue(
   mode: UpdateGlobalConfigModeKind,
-  value: number | PublicKey,
+  value: number | Address,
 ): Array<number> {
   const valueData = Buffer.alloc(128);
   let valueNumber: number;
-  let valuePublicKey: Buffer;
+  let valueAddress: Buffer;
   switch (mode.discriminator) {
     case UpdateGlobalConfigMode.UpdateEmergencyMode.discriminator:
     case UpdateGlobalConfigMode.UpdateFlashTakeOrderBlocked.discriminator:
@@ -503,8 +540,8 @@ function encodedUpdateGlobalConfigValue(
       valueData.writeBigUInt64LE(BigInt(value.toString()), 0);
       break;
     case UpdateGlobalConfigMode.UpdateAdminAuthorityCached.discriminator:
-      valuePublicKey = (value as PublicKey).toBuffer();
-      valuePublicKey.copy(valueData, 0);
+      valueAddress = Buffer.from(getAddressEncoder().encode(value as Address));
+      valueAddress.copy(valueData, 0);
       break;
   }
 

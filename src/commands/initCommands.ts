@@ -1,52 +1,43 @@
-import { Keypair, PublicKey } from "@solana/web3.js";
 import { GlobalConfig } from "../rpc_client/accounts";
 import { initializeClient } from "./utils";
-import {
-  getLimoProgramId,
-  getSolBalanceInLamports,
-  getTokenAccountBalance,
-  getTokenVaultPDA,
-  parseKeypairFile,
-  PublicKeySet,
-} from "../utils";
+import { getLimoProgramId, getTokenVaultPDA, parseKeypairFile } from "../utils";
 import { LimoClient } from "../Limo";
 import * as fs from "fs";
-import { token } from "@coral-xyz/anchor/dist/cjs/utils";
+import { address, Address } from "@solana/kit";
+import { generateKeyPairSigner } from "@solana/signers";
 
 export async function initGlobalConfigCommand(globalConfigFilePath?: string) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   console.log("rpc", rpc);
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
   const globalConfig = globalConfigFilePath
-    ? parseKeypairFile(globalConfigFilePath)
-    : Keypair.generate();
-  const client = new LimoClient(env.provider.connection, undefined);
+    ? await parseKeypairFile(globalConfigFilePath)
+    : await generateKeyPairSigner();
+  const client = new LimoClient(env.rpc, env.rpcWs, undefined);
   await client.createGlobalConfig(env.admin, globalConfig);
 
   let globalConfigState: GlobalConfig | null = await GlobalConfig.fetch(
-    env.provider.connection,
-    globalConfig.publicKey,
+    env.rpc,
+    globalConfig.address,
+    env.programAddress,
   );
   console.log(
     "Global Config",
-    globalConfig.publicKey.toString(),
+    globalConfig.toString(),
     globalConfigState?.toJSON(),
   );
 }
 
-export async function initVault(mint: PublicKey, mode: string) {
+export async function initVault(mint: Address, mode: string) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
-  let vault = getTokenVaultPDA(
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
+  let vault = await getTokenVaultPDA(
     client.getProgramID(),
-    new PublicKey(globalConfig!),
+    address(globalConfig!),
     mint,
   );
 
@@ -62,11 +53,8 @@ export async function initVaultsFromMintsListFile(
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   const fileContents = fs.readFileSync(mintsListFilePath, "utf8");
 
@@ -84,19 +72,18 @@ export async function initVaultsFromMintsListFile(
 
   console.log("Mints to initialize vaults for:", mints.length);
 
-  const mintsSet = new PublicKeySet(mints.map((mint) => new PublicKey(mint)));
+  const mintsSet = new Set(mints.map((mint) => address(mint)));
 
-  for (let mint of mintsSet.toArray()) {
-    const mintPk = new PublicKey(mint);
-    const vaultAddress = getTokenVaultPDA(
+  for (let mint of Array.from(mintsSet)) {
+    const mintPk = address(mint);
+    const vaultAddress = await getTokenVaultPDA(
       client.getProgramID(),
-      new PublicKey(globalConfig!),
+      address(globalConfig!),
       mintPk,
     );
     try {
-      const vaultBalance = (
-        await client.getConnection().getAccountInfo(vaultAddress)
-      )?.lamports;
+      const vaultBalance = (await env.rpc.getAccountInfo(vaultAddress).send())
+        ?.value?.lamports;
       if (vaultBalance! > 0) {
         mode !== "multisig" &&
           console.log(
@@ -137,7 +124,7 @@ type Tokens = {
 
 export async function getKaminoTokenMintsFromApi() {
   console.log("Fetching mints from API...");
-  const supportedTokenMints: PublicKey[] = [];
+  const supportedTokenMints: Address[] = [];
 
   try {
     const response = await fetch(API_URL);
@@ -147,7 +134,7 @@ export async function getKaminoTokenMintsFromApi() {
     const data: any = await response.json();
     const tokensDict: Tokens = data["mainnet-beta"].tokens;
     for (const token of Object.values(tokensDict)) {
-      supportedTokenMints.push(new PublicKey(token.mint));
+      supportedTokenMints.push(address(token.mint));
     }
   } catch (error) {
     console.log("Failed to fetch token mints:", error);

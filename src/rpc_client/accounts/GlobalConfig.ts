@@ -1,6 +1,17 @@
-import { PublicKey, Connection } from "@solana/web3.js";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  address,
+  Address,
+  fetchEncodedAccount,
+  fetchEncodedAccounts,
+  GetAccountInfoApi,
+  GetMultipleAccountsApi,
+  Rpc,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
@@ -30,10 +41,10 @@ export interface GlobalConfigFields {
    * in lamports, stored in the pda_authority account
    */
   hostTipAmount: BN;
-  pdaAuthority: PublicKey;
+  pdaAuthority: Address;
   pdaAuthorityBump: BN;
-  adminAuthority: PublicKey;
-  adminAuthorityCached: PublicKey;
+  adminAuthority: Address;
+  adminAuthorityCached: Address;
   txnFeeCost: BN;
   ataCreationCost: BN;
   padding2: Array<BN>;
@@ -100,10 +111,10 @@ export class GlobalConfig {
    * in lamports, stored in the pda_authority account
    */
   readonly hostTipAmount: BN;
-  readonly pdaAuthority: PublicKey;
+  readonly pdaAuthority: Address;
   readonly pdaAuthorityBump: BN;
-  readonly adminAuthority: PublicKey;
-  readonly adminAuthorityCached: PublicKey;
+  readonly adminAuthority: Address;
+  readonly adminAuthorityCached: Address;
   readonly txnFeeCost: BN;
   readonly ataCreationCost: BN;
   readonly padding2: Array<BN>;
@@ -112,7 +123,7 @@ export class GlobalConfig {
     149, 8, 156, 202, 160, 252, 176, 217,
   ]);
 
-  static readonly layout = borsh.struct([
+  static readonly layout = borsh.struct<GlobalConfig>([
     borsh.u8("emergencyMode"),
     borsh.u8("flashTakeOrderBlocked"),
     borsh.u8("newOrdersBlocked"),
@@ -124,10 +135,10 @@ export class GlobalConfig {
     borsh.u64("pdaAuthorityPreviousLamportsBalance"),
     borsh.u64("totalTipAmount"),
     borsh.u64("hostTipAmount"),
-    borsh.publicKey("pdaAuthority"),
+    borshAddress("pdaAuthority"),
     borsh.u64("pdaAuthorityBump"),
-    borsh.publicKey("adminAuthority"),
-    borsh.publicKey("adminAuthorityCached"),
+    borshAddress("adminAuthority"),
+    borshAddress("adminAuthorityCached"),
     borsh.u64("txnFeeCost"),
     borsh.u64("ataCreationCost"),
     borsh.array(borsh.u64(), 241, "padding2"),
@@ -156,38 +167,42 @@ export class GlobalConfig {
   }
 
   static async fetch(
-    c: Connection,
-    address: PublicKey,
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetAccountInfoApi>,
+    address: Address,
+    programId: Address = PROGRAM_ID,
   ): Promise<GlobalConfig | null> {
-    const info = await c.getAccountInfo(address);
+    const info = await fetchEncodedAccount(rpc, address);
 
-    if (info === null) {
+    if (!info.exists) {
       return null;
     }
-    if (!info.owner.equals(programId)) {
-      throw new Error("account doesn't belong to this program");
+    if (info.programAddress !== programId) {
+      throw new Error(
+        `GlobalConfigFields account ${address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+      );
     }
 
-    return this.decode(info.data);
+    return this.decode(Buffer.from(info.data));
   }
 
   static async fetchMultiple(
-    c: Connection,
-    addresses: PublicKey[],
-    programId: PublicKey = PROGRAM_ID,
+    rpc: Rpc<GetMultipleAccountsApi>,
+    addresses: Address[],
+    programId: Address = PROGRAM_ID,
   ): Promise<Array<GlobalConfig | null>> {
-    const infos = await c.getMultipleAccountsInfo(addresses);
+    const infos = await fetchEncodedAccounts(rpc, addresses);
 
     return infos.map((info) => {
-      if (info === null) {
+      if (!info.exists) {
         return null;
       }
-      if (!info.owner.equals(programId)) {
-        throw new Error("account doesn't belong to this program");
+      if (info.programAddress !== programId) {
+        throw new Error(
+          `GlobalConfigFields account ${info.address} belongs to wrong program ${info.programAddress}, expected ${programId}`,
+        );
       }
 
-      return this.decode(info.data);
+      return this.decode(Buffer.from(info.data));
     });
   }
 
@@ -235,10 +250,10 @@ export class GlobalConfig {
         this.pdaAuthorityPreviousLamportsBalance.toString(),
       totalTipAmount: this.totalTipAmount.toString(),
       hostTipAmount: this.hostTipAmount.toString(),
-      pdaAuthority: this.pdaAuthority.toString(),
+      pdaAuthority: this.pdaAuthority,
       pdaAuthorityBump: this.pdaAuthorityBump.toString(),
-      adminAuthority: this.adminAuthority.toString(),
-      adminAuthorityCached: this.adminAuthorityCached.toString(),
+      adminAuthority: this.adminAuthority,
+      adminAuthorityCached: this.adminAuthorityCached,
       txnFeeCost: this.txnFeeCost.toString(),
       ataCreationCost: this.ataCreationCost.toString(),
       padding2: this.padding2.map((item) => item.toString()),
@@ -260,10 +275,10 @@ export class GlobalConfig {
       ),
       totalTipAmount: new BN(obj.totalTipAmount),
       hostTipAmount: new BN(obj.hostTipAmount),
-      pdaAuthority: new PublicKey(obj.pdaAuthority),
+      pdaAuthority: address(obj.pdaAuthority),
       pdaAuthorityBump: new BN(obj.pdaAuthorityBump),
-      adminAuthority: new PublicKey(obj.adminAuthority),
-      adminAuthorityCached: new PublicKey(obj.adminAuthorityCached),
+      adminAuthority: address(obj.adminAuthority),
+      adminAuthorityCached: address(obj.adminAuthorityCached),
       txnFeeCost: new BN(obj.txnFeeCost),
       ataCreationCost: new BN(obj.ataCreationCost),
       padding2: obj.padding2.map((item) => new BN(item)),

@@ -1,7 +1,8 @@
-import { PublicKey } from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { address, Address } from "@solana/kit"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh";
+import { borshAddress } from "../utils";
 
 export type BoolFields = [boolean];
 export type BoolValue = [boolean];
@@ -108,8 +109,8 @@ export class U64 {
   }
 }
 
-export type PubkeyFields = [PublicKey];
-export type PubkeyValue = [PublicKey];
+export type PubkeyFields = [Address];
+export type PubkeyValue = [Address];
 
 export interface PubkeyJSON {
   kind: "Pubkey";
@@ -130,7 +131,7 @@ export class Pubkey {
   toJSON(): PubkeyJSON {
     return {
       kind: "Pubkey",
-      value: [this.value[0].toString()],
+      value: [this.value[0]],
     };
   }
 
@@ -183,7 +184,7 @@ export function fromJSON(
       return new U64([new BN(obj.value[0])]);
     }
     case "Pubkey": {
-      return new Pubkey([new PublicKey(obj.value[0])]);
+      return new Pubkey([address(obj.value[0])]);
     }
   }
 }
@@ -193,7 +194,7 @@ export function layout(property?: string) {
     borsh.struct([borsh.bool("_0")], "Bool"),
     borsh.struct([borsh.u16("_0")], "U16"),
     borsh.struct([borsh.u64("_0")], "U64"),
-    borsh.struct([borsh.publicKey("_0")], "Pubkey"),
+    borsh.struct([borshAddress("_0")], "Pubkey"),
   ]);
   if (property !== undefined) {
     return ret.replicate(property);

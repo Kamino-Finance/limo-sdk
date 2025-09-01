@@ -1,38 +1,35 @@
-import { PublicKey } from "@solana/web3.js";
 import { Order } from "../rpc_client/accounts";
 import { initializeClient } from "./utils";
 import {
-  getLimoProgramId,
   FilledOrderQueue,
-  OrderStateAndAddress,
-  PubkeyHashMap,
-  sleep,
+  getLimoProgramId,
   OrderDisplay,
+  OrderStateAndAddress,
+  sleep,
 } from "../utils";
 import { LimoClient } from "../Limo";
+import { Address, address } from "@solana/kit";
+import { Slot } from "@solana/rpc-types/dist/types/typed-numbers";
 
 export async function listenToOrderChanges() {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
-  const ordersUpdated = new PubkeyHashMap<PublicKey, Order>();
+  const ordersUpdated = new Map<Address, Order>();
 
   const callbackOnChange = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Order updated", orderStateAndAddress, slot);
     ordersUpdated.set(orderStateAndAddress.address, orderStateAndAddress.state);
   };
 
-  const subscriptionId = client.listenToOrdersChangeWithFilters(
+  const subscriptionId = await client.listenToOrdersChangeWithFilters(
     [],
     callbackOnChange,
   );
@@ -46,18 +43,15 @@ export async function listenToOrderChanges() {
 }
 
 export async function listenToOrderFillChangesForQuoteAndBase(
-  quote: PublicKey,
-  base: PublicKey,
+  quote: Address,
+  base: Address,
 ) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   // const latestFilledOrders = new PubkeyHashMap<PublicKey, Order>();
   const mintDecimals = await client.getMintDecimals([quote, base]);
@@ -71,7 +65,7 @@ export async function listenToOrderFillChangesForQuoteAndBase(
 
   const callbackOnChangeBuyOrder = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Buy Order updated", orderStateAndAddress, slot);
     const order = client.toOrdersDisplay(
@@ -94,7 +88,7 @@ export async function listenToOrderFillChangesForQuoteAndBase(
 
   const callbackOnChangeSellOrder = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Sell Order updated", orderStateAndAddress, slot);
     const order = client.toOrdersDisplay(
@@ -115,8 +109,8 @@ export async function listenToOrderFillChangesForQuoteAndBase(
     });
   };
 
-  const { subscriptionIdBuyOrders, subscriptionIdSellOrders } =
-    client.listenToOrderFillChangeForBaseAndQuote(
+  const { abortControllerBuyOrders, abortControllerSellOrders } =
+    await client.listenToOrderFillChangeForBaseAndQuote(
       base,
       quote,
       callbackOnChangeSellOrder,
@@ -128,31 +122,28 @@ export async function listenToOrderFillChangesForQuoteAndBase(
     console.log("Number of orders updated", ordersUpdated);
   }
 
-  client.stopListeningToOrdersChange(subscriptionIdBuyOrders);
-  client.stopListeningToOrdersChange(subscriptionIdSellOrders);
+  client.stopListeningToOrdersChange(abortControllerBuyOrders);
+  client.stopListeningToOrdersChange(abortControllerSellOrders);
 }
 
 export async function listenToOrderChangesForQuoteAndBase(
-  quote: PublicKey,
-  base: PublicKey,
+  quote: Address,
+  base: Address,
 ) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   const mintDecimals = await client.getMintDecimals([quote, base]);
 
   const { bidOrders: ordersBuy, askOrders: ordersSell } =
     await client.getOrdersDisplayForBaseAndQuote(base, quote, mintDecimals);
 
-  const buyOrders = new PubkeyHashMap<PublicKey, OrderDisplay>();
-  const sellOrders = new PubkeyHashMap<PublicKey, OrderDisplay>();
+  const buyOrders = new Map<Address, OrderDisplay>();
+  const sellOrders = new Map<Address, OrderDisplay>();
   ordersBuy.forEach((order) => {
     buyOrders.set(order.address, order);
   });
@@ -163,7 +154,7 @@ export async function listenToOrderChangesForQuoteAndBase(
 
   const callbackOnChangeBuyOrder = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Buy Order updated", orderStateAndAddress, slot);
     const order = client.toOrdersDisplay(
@@ -176,7 +167,7 @@ export async function listenToOrderChangesForQuoteAndBase(
 
   const callbackOnChangeSellOrder = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Sell Order updated", orderStateAndAddress, slot);
     const order = client.toOrdersDisplay(
@@ -187,8 +178,8 @@ export async function listenToOrderChangesForQuoteAndBase(
     ordersSell.push(order);
   };
 
-  const { subscriptionIdBuyOrders, subscriptionIdSellOrders } =
-    client.listenToOrderChangeForBaseAndQuote(
+  const { abortControllerBuyOrders, abortControllerSellOrders } =
+    await client.listenToOrderChangeForBaseAndQuote(
       base,
       quote,
       callbackOnChangeSellOrder,
@@ -200,20 +191,17 @@ export async function listenToOrderChangesForQuoteAndBase(
     console.log("Number of orders updated", ordersUpdated);
   }
 
-  client.stopListeningToOrdersChange(subscriptionIdBuyOrders);
-  client.stopListeningToOrdersChange(subscriptionIdSellOrders);
+  client.stopListeningToOrdersChange(abortControllerBuyOrders);
+  client.stopListeningToOrdersChange(abortControllerSellOrders);
 }
 
-export async function listenToOrderChangesForMaker(maker: PublicKey) {
+export async function listenToOrderChangesForMaker(maker: Address) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   const mintDecimals = await client.getAllMintDecimals();
   let ordersUpdated = 0;
@@ -222,14 +210,14 @@ export async function listenToOrderChangesForMaker(maker: PublicKey) {
     maker,
     mintDecimals,
   );
-  const makerOrders = new PubkeyHashMap<PublicKey, OrderDisplay>();
+  const makerOrders = new Map<Address, OrderDisplay>();
   existingOrders.forEach((order) => {
     makerOrders.set(order.address, order);
   });
 
   const callbackOnChange = async (
     orderStateAndAddress: OrderStateAndAddress,
-    slot: number,
+    slot: Slot,
   ) => {
     console.log("Order updated", orderStateAndAddress, slot);
     ordersUpdated += 1;
@@ -240,7 +228,10 @@ export async function listenToOrderChangesForMaker(maker: PublicKey) {
     makerOrders.set(orderStateAndAddress.address, orderDisplay);
   };
 
-  const subscriptionId = client.listenToMakerOrders(maker, callbackOnChange);
+  const subscriptionId = await client.listenToMakerOrders(
+    maker,
+    callbackOnChange,
+  );
 
   while (ordersUpdated < 10) {
     await sleep(2000);

@@ -1,27 +1,27 @@
-import {
-  ComputeBudgetProgram,
-  PublicKey,
-  TransactionInstruction,
-} from "@solana/web3.js";
 import { Env, setUpProgram } from "../utils";
+import { Address, Instruction } from "@solana/kit";
+import {
+  getSetComputeUnitLimitInstruction,
+  getSetComputeUnitPriceInstruction,
+} from "@solana-program/compute-budget";
 
 export function createAddExtraComputeUnitFeeTransaction(
   units: number,
   microLamports: number,
-): TransactionInstruction[] {
-  const ixns: TransactionInstruction[] = [];
-  ixns.push(ComputeBudgetProgram.setComputeUnitLimit({ units }));
-  ixns.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports }));
+): Instruction[] {
+  const ixns: Instruction[] = [];
+  ixns.push(getSetComputeUnitLimitInstruction({ units }));
+  ixns.push(getSetComputeUnitPriceInstruction({ microLamports }));
   return ixns;
 }
 
-export function initializeClient(
+export async function initializeClient(
   cluster: string,
   admin: string | undefined,
-  programId: PublicKey,
+  programAddress: Address,
   multisig: boolean,
   debug: boolean = false,
-): Env {
+): Promise<Env> {
   let resolvedCluster: string;
   let resolvedAdmin: string;
 
@@ -39,16 +39,16 @@ export function initializeClient(
   }
 
   // Get connection first
-  const env: Env = setUpProgram({
+  const env: Env = await setUpProgram({
     adminFilePath: resolvedAdmin,
     clusterOverride: cluster,
-    programOverride: programId,
+    programOverride: programAddress,
   });
 
   !multisig && debug && console.log("\nSettings ⚙️");
   !multisig &&
     debug &&
-    console.log("Program ID:", env.program.programId.toString());
+    console.log("Program ID:", env.programAddress.toString());
   !multisig && debug && console.log("Admin:", resolvedAdmin);
   !multisig && debug && console.log("Cluster:", resolvedCluster);
 

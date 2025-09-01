@@ -1,15 +1,17 @@
-import { GetProgramAccountsFilter, PublicKey } from "@solana/web3.js";
-import { Order, OrderFields } from "../rpc_client/accounts";
+import { Order } from "../rpc_client/accounts";
 import { green, initializeClient, red } from "./utils";
 import {
   amountToLamportsBN,
   getLimoProgramId,
   getMintDecimals,
   lamportsToAmountDecimal,
+  SolanaKitFilter,
 } from "../utils";
 import { LimoClient } from "../Limo";
 import Decimal from "decimal.js";
 import BN from "bn.js";
+import { Address, address } from "@solana/kit";
+import { Base58EncodedBytes } from "@solana/kit/dist/types";
 
 export async function listOrders(
   quoteToken: string | undefined,
@@ -28,14 +30,11 @@ export async function listOrders(
     ? new Decimal(filterOutRemainingLamportsAmountQuoteToken)
     : new Decimal(0);
 
-  let quote = new PublicKey((quoteToken ?? process.env.QUOTE_TOKEN)!);
-  let base = new PublicKey((baseToken ?? process.env.BASE_TOKEN)!);
+  let quote = address((quoteToken ?? process.env.QUOTE_TOKEN)!);
+  let base = address((baseToken ?? process.env.BASE_TOKEN)!);
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   let bidOrders = await getOrders(client, base, quote);
   let askOrders = await getOrders(client, quote, base);
@@ -48,10 +47,7 @@ export async function listOrders(
   let decimalsMap: Map<string, number> = new Map();
 
   for (let mint of mints) {
-    let decimals = await getMintDecimals(
-      env.provider.connection,
-      new PublicKey(mint),
-    );
+    let decimals = await getMintDecimals(env.rpc, address(mint));
     decimalsMap.set(mint, decimals);
   }
 
@@ -61,7 +57,7 @@ export async function listOrders(
     baseUiAmount: Decimal;
     quoteDisplay: string;
     baseDisplay: string;
-    orderAddress: PublicKey;
+    orderAddress: Address;
   }[] = [];
 
   let askOrdersFormatted: {
@@ -70,7 +66,7 @@ export async function listOrders(
     baseUiAmount: Decimal;
     quoteDisplay: string;
     baseDisplay: string;
-    orderAddress: PublicKey;
+    orderAddress: Address;
   }[] = [];
 
   for (let [order, orderAddress] of askOrders) {
@@ -198,55 +194,53 @@ export async function getAllOrders() {
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   const ordersAndAddresses =
     await client.getAllOrdersStateAndAddressForGlobalConfig();
 
   for (const order of ordersAndAddresses) {
-    console.log(order.address.toBase58());
+    console.log(order.address);
   }
 }
 
 async function getOrders(
   client: LimoClient,
-  inTokenMint: PublicKey | undefined,
-  outTokenMint: PublicKey | undefined,
-): Promise<[Order, PublicKey][]> {
-  let filters: GetProgramAccountsFilter[] = [];
+  inTokenMint: Address | undefined,
+  outTokenMint: Address | undefined,
+): Promise<[Order, Address][]> {
+  let filters: SolanaKitFilter[] = [];
 
   if (inTokenMint) {
     filters.push({
       memcmp: {
-        bytes: inTokenMint.toBase58(),
-        offset: 8 + 32 + 32,
+        bytes: inTokenMint.toString() as Base58EncodedBytes,
+        encoding: "base58",
+        offset: BigInt(8 + 32 + 32),
       },
     });
   }
   if (outTokenMint) {
     filters.push({
       memcmp: {
-        bytes: outTokenMint.toBase58(),
-        offset: 8 + 32 + 32 + 32 + 32,
+        bytes: outTokenMint.toString() as Base58EncodedBytes,
+        encoding: "base58",
+        offset: BigInt(8 + 32 + 32 + 32 + 32),
       },
     });
   }
 
-  filters.push({
-    dataSize: Order.layout.span + 8,
-  });
-
-  const state: [Order, PublicKey][] = (
-    await client.getProgram().account.order.all(filters)
-  ).map((x) => {
-    return [new Order(x.account as unknown as OrderFields), x.publicKey];
-  });
-
-  return state;
+  const ordersAndAddresses =
+    await client.getAllOrdersStateAndAddressWithFilters(
+      filters,
+      undefined,
+      true,
+    );
+  return ordersAndAddresses.map((orderData) => [
+    orderData.state,
+    orderData.address,
+  ]);
 }
 
 export async function placeOrder(
@@ -260,20 +254,17 @@ export async function placeOrder(
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  let base = new PublicKey((baseToken ?? process.env.BASE_TOKEN)!);
-  let quote = new PublicKey((quoteToken ?? process.env.QUOTE_TOKEN)!);
+  let base = address((baseToken ?? process.env.BASE_TOKEN)!);
+  let quote = address((quoteToken ?? process.env.QUOTE_TOKEN)!);
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   const mintTokenPrograms = await client.getMintsProgramOwners([base, quote]);
   const baseTokenProgram = mintTokenPrograms[0];
   const quoteTokenProgram = mintTokenPrograms[1];
 
-  let orderAddress: PublicKey;
+  let orderAddress: Address;
   let signature: string;
 
   if (type === "bid") {
@@ -287,7 +278,7 @@ export async function placeOrder(
       baseTokenProgram,
       quoteTokenProgram,
     );
-    orderAddress = order.publicKey;
+    orderAddress = order.address;
     signature = sig;
   } else {
     const [sig, order] = await client.placeAsk(
@@ -300,12 +291,12 @@ export async function placeOrder(
       quoteTokenProgram,
       baseTokenProgram,
     );
-    orderAddress = order.publicKey;
+    orderAddress = order.address;
     signature = sig;
   }
 
   let orderState: Order | null = await Order.fetch(
-    env.provider.connection,
+    env.rpc,
     orderAddress,
     client.getProgramID(),
   );
@@ -314,7 +305,7 @@ export async function placeOrder(
 }
 
 export async function permissionlessTakeOrder(
-  order: PublicKey,
+  order: Address,
   amountToTakeDecimals: number | undefined,
   tipAmountLamports: number | undefined,
   mode: string,
@@ -322,21 +313,12 @@ export async function permissionlessTakeOrder(
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
-  const expressRelayProgramId = new PublicKey(
-    process.env.EXPRESS_RELAY_PROGRAM_ID!,
-  );
+  const expressRelayProgramId = address(process.env.EXPRESS_RELAY_PROGRAM_ID!);
 
-  const env = initializeClient(rpc!, admin!, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
-  const orderState = await Order.fetch(
-    env.provider.connection,
-    order,
-    client.getProgramID(),
-  );
+  const orderState = await Order.fetch(env.rpc, order, client.getProgramID());
 
   if (!orderState) {
     console.log("Order not found");
@@ -374,16 +356,13 @@ export async function permissionlessTakeOrder(
   );
 }
 
-export async function listOrdersForUser(user: PublicKey) {
+export async function listOrdersForUser(user: Address) {
   const admin = process.env.ADMIN;
   const rpc = process.env.RPC_ENV;
   const globalConfig = process.env.LIMO_GLOBAL_CONFIG;
 
-  const env = initializeClient(rpc!, admin, getLimoProgramId(rpc!), false);
-  const client = new LimoClient(
-    env.provider.connection,
-    new PublicKey(globalConfig!),
-  );
+  const env = await initializeClient(rpc!, admin, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
 
   // Time and print the duration of the line below
   let orders = await client.getAllOrdersDisplayForMaker(user);

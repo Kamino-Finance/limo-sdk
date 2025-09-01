@@ -1,81 +1,69 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
+export const DISCRIMINATOR = Buffer.from([133, 108, 23, 15, 226, 215, 176, 95]);
+
 export interface LogUserSwapBalancesStartAccounts {
   baseAccounts: {
-    maker: PublicKey;
-    inputMint: PublicKey;
-    outputMint: PublicKey;
-    inputTa: PublicKey;
-    outputTa: PublicKey;
+    maker: TransactionSigner;
+    inputMint: Address;
+    outputMint: Address;
+    inputTa: Address;
+    outputTa: Address;
     /** if it's not the pda it doesn't matter */
-    pdaReferrer: PublicKey;
-    swapProgramId: PublicKey;
+    pdaReferrer: Option<Address>;
+    swapProgramId: Address;
   };
-  userSwapBalanceState: PublicKey;
-  systemProgram: PublicKey;
-  rent: PublicKey;
-  sysvarInstructions: PublicKey;
-  eventAuthority: PublicKey;
-  program: PublicKey;
+  userSwapBalanceState: Address;
+  systemProgram: Address;
+  rent: Address;
+  sysvarInstructions: Address;
+  eventAuthority: Address;
+  program: Address;
 }
 
 export function logUserSwapBalancesStart(
   accounts: LogUserSwapBalancesStartAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.baseAccounts.maker, isSigner: true, isWritable: false },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
     {
-      pubkey: accounts.baseAccounts.inputMint,
-      isSigner: false,
-      isWritable: false,
+      address: accounts.baseAccounts.maker.address,
+      role: 2,
+      signer: accounts.baseAccounts.maker,
     },
-    {
-      pubkey: accounts.baseAccounts.outputMint,
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: accounts.baseAccounts.inputTa,
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: accounts.baseAccounts.outputTa,
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: accounts.baseAccounts.pdaReferrer,
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: accounts.baseAccounts.swapProgramId,
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: accounts.userSwapBalanceState,
-      isSigner: false,
-      isWritable: true,
-    },
-    { pubkey: accounts.systemProgram, isSigner: false, isWritable: false },
-    { pubkey: accounts.rent, isSigner: false, isWritable: false },
-    { pubkey: accounts.sysvarInstructions, isSigner: false, isWritable: false },
-    { pubkey: accounts.eventAuthority, isSigner: false, isWritable: false },
-    { pubkey: accounts.program, isSigner: false, isWritable: false },
+    { address: accounts.baseAccounts.inputMint, role: 0 },
+    { address: accounts.baseAccounts.outputMint, role: 0 },
+    { address: accounts.baseAccounts.inputTa, role: 0 },
+    { address: accounts.baseAccounts.outputTa, role: 0 },
+    isSome(accounts.baseAccounts.pdaReferrer)
+      ? { address: accounts.baseAccounts.pdaReferrer.value, role: 0 }
+      : { address: programAddress, role: 0 },
+    { address: accounts.baseAccounts.swapProgramId, role: 0 },
+    { address: accounts.userSwapBalanceState, role: 1 },
+    { address: accounts.systemProgram, role: 0 },
+    { address: accounts.rent, role: 0 },
+    { address: accounts.sysvarInstructions, role: 0 },
+    { address: accounts.eventAuthority, role: 0 },
+    { address: accounts.program, role: 0 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([133, 108, 23, 15, 226, 215, 176, 95]);
-  const data = identifier;
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = DISCRIMINATOR;
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

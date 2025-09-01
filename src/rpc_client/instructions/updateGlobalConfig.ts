@@ -1,12 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
+
+export const DISCRIMINATOR = Buffer.from([
+  164, 84, 130, 189, 111, 58, 250, 200,
+]);
 
 export interface UpdateGlobalConfigArgs {
   mode: number;
@@ -14,11 +25,11 @@ export interface UpdateGlobalConfigArgs {
 }
 
 export interface UpdateGlobalConfigAccounts {
-  adminAuthority: PublicKey;
-  globalConfig: PublicKey;
+  adminAuthority: TransactionSigner;
+  globalConfig: Address;
 }
 
-export const layout = borsh.struct([
+export const layout = borsh.struct<UpdateGlobalConfigArgs>([
   borsh.u16("mode"),
   borsh.array(borsh.u8(), 128, "value"),
 ]);
@@ -26,13 +37,18 @@ export const layout = borsh.struct([
 export function updateGlobalConfig(
   args: UpdateGlobalConfigArgs,
   accounts: UpdateGlobalConfigAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
-    { pubkey: accounts.adminAuthority, isSigner: true, isWritable: true },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
+    {
+      address: accounts.adminAuthority.address,
+      role: 3,
+      signer: accounts.adminAuthority,
+    },
+    { address: accounts.globalConfig, role: 1 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([164, 84, 130, 189, 111, 58, 250, 200]);
   const buffer = Buffer.alloc(1000);
   const len = layout.encode(
     {
@@ -41,7 +57,7 @@ export function updateGlobalConfig(
     },
     buffer,
   );
-  const data = Buffer.concat([identifier, buffer]).slice(0, 8 + len);
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = Buffer.concat([DISCRIMINATOR, buffer]).slice(0, 8 + len);
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }

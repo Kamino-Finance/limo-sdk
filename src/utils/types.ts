@@ -1,17 +1,24 @@
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { Order } from "../rpc_client/accounts/Order";
 import Decimal from "decimal.js";
-import { BN } from "@coral-xyz/anchor";
+import {
+  Address,
+  GetProgramAccountsDatasizeFilter,
+  GetProgramAccountsMemcmpFilter,
+  Instruction,
+  Slot,
+  TransactionSigner,
+} from "@solana/kit";
+import BN from "bn.js";
 
 export type OrderStateAndAddress = {
   state: Order;
-  address: PublicKey;
+  address: Address;
 };
 
 export type OrderDisplay = {
-  address: PublicKey;
+  address: Address;
   state: Order;
-  maker: PublicKey;
+  maker: Address;
   initialInputAmountDecimal: Decimal;
   expectedOutputAmountDecimal: Decimal;
   remainingInputAmountDecimal: Decimal;
@@ -27,10 +34,10 @@ export type OrderDisplay = {
 };
 
 export type FilledOrder = {
-  address: PublicKey;
+  address: Address;
   orderDisplay: OrderDisplay;
-  quoteTokenMint: PublicKey;
-  baseTokenMint: PublicKey;
+  quoteTokenMint: Address;
+  baseTokenMint: Address;
   time: number;
   price: Decimal;
   size: Decimal;
@@ -39,15 +46,15 @@ export type FilledOrder = {
 };
 
 export type FlashTakeOrderIxs = {
-  createAtaIxs: TransactionInstruction[];
-  startFlashIx: TransactionInstruction;
-  endFlashIx: TransactionInstruction;
-  closeWsolAtaIxs: TransactionInstruction[];
+  createAtaIxs: Instruction[];
+  startFlashIx: Instruction;
+  endFlashIx: Instruction;
+  closeWsolAtaIxs: Instruction[];
 };
 
 export type OrderListenerCallbackOnChange = (
   orderStateAndAddress: OrderStateAndAddress,
-  slot: number,
+  slot: Slot,
 ) => void;
 
 export class FilledOrderQueue<V> {
@@ -61,8 +68,8 @@ export class FilledOrderQueue<V> {
 
   push(order: FilledOrder): void {
     // Check if the order is already in the queue
-    const existingIndex = this.queue.findIndex((o) =>
-      o.address.equals(order.address),
+    const existingIndex = this.queue.findIndex(
+      (o) => o.address === order.address,
     );
 
     if (existingIndex !== -1) {
@@ -89,12 +96,12 @@ export class FilledOrderQueue<V> {
 }
 
 export type LogUserSwapBalancesIxArgs = {
-  user: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
-  inputTa: PublicKey;
-  outputTa: PublicKey;
-  swapProgarmId: PublicKey;
+  user: TransactionSigner;
+  inputMint: Address;
+  outputMint: Address;
+  inputTa: Address;
+  outputTa: Address;
+  swapProgarmId: Address;
   simulatedSwapAmountOut: BN;
   simulatedTs: BN;
   minimumAmountOut: BN;
@@ -102,33 +109,37 @@ export type LogUserSwapBalancesIxArgs = {
   simulatedAmountOutNextBest: BN;
   aggregatorId: number;
   nextBestAggregatorId: number;
-  pdaReferrer: PublicKey;
-  voteAccount?: PublicKey;
+  pdaReferrer: Address;
+  voteAccount?: Address;
 };
 
 export type AssertUserSwapBalancesIxArgs = {
-  user: PublicKey;
-  inputMint?: PublicKey;
-  outputMint?: PublicKey;
-  inputMintProgramId?: PublicKey;
-  outputMintProgramId?: PublicKey;
+  user: TransactionSigner;
+  inputMint?: Address;
+  outputMint?: Address;
+  inputMintProgramId?: Address;
+  outputMintProgramId?: Address;
   maxInputAmountChange: BN;
   minOutputAmountChange: BN;
-  inputTa?: PublicKey;
-  outputTa?: PublicKey;
+  inputTa?: Address;
+  outputTa?: Address;
 };
 
 export type CreateOrderWithParamsArgs = {
-  user: PublicKey;
-  inputMint: PublicKey;
-  outputMint: PublicKey;
+  user: TransactionSigner;
+  inputMint: Address;
+  outputMint: Address;
   inputAmountLamports: BN;
   outputAmountLamports: BN;
-  inputMintProgramId: PublicKey;
-  outputMintProgramId: PublicKey;
+  inputMintProgramId: Address;
+  outputMintProgramId: Address;
   permissionless: boolean;
-  counterparty?: PublicKey;
-  globalConfigOverride?: PublicKey;
+  counterparty?: Address;
+  globalConfigOverride?: Address;
   wrapUnwrapSol?: boolean;
   withInitVault?: boolean;
 };
+
+export type SolanaKitFilter =
+  | GetProgramAccountsMemcmpFilter
+  | GetProgramAccountsDatasizeFilter;

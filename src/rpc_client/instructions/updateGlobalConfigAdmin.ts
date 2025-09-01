@@ -1,32 +1,44 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
-  TransactionInstruction,
-  PublicKey,
+  Address,
+  isSome,
   AccountMeta,
-} from "@solana/web3.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
+  AccountSignerMeta,
+  Instruction,
+  Option,
+  TransactionSigner,
+} from "@solana/kit";
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import BN from "bn.js"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as borsh from "@coral-xyz/borsh"; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { borshAddress } from "../utils"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-unused-vars
 import { PROGRAM_ID } from "../programId";
 
+export const DISCRIMINATOR = Buffer.from([
+  184, 87, 23, 193, 156, 238, 175, 119,
+]);
+
 export interface UpdateGlobalConfigAdminAccounts {
-  adminAuthorityCached: PublicKey;
-  globalConfig: PublicKey;
+  adminAuthorityCached: TransactionSigner;
+  globalConfig: Address;
 }
 
 export function updateGlobalConfigAdmin(
   accounts: UpdateGlobalConfigAdminAccounts,
-  programId: PublicKey = PROGRAM_ID,
+  remainingAccounts: Array<AccountMeta | AccountSignerMeta> = [],
+  programAddress: Address = PROGRAM_ID,
 ) {
-  const keys: Array<AccountMeta> = [
+  const keys: Array<AccountMeta | AccountSignerMeta> = [
     {
-      pubkey: accounts.adminAuthorityCached,
-      isSigner: true,
-      isWritable: false,
+      address: accounts.adminAuthorityCached.address,
+      role: 2,
+      signer: accounts.adminAuthorityCached,
     },
-    { pubkey: accounts.globalConfig, isSigner: false, isWritable: true },
+    { address: accounts.globalConfig, role: 1 },
+    ...remainingAccounts,
   ];
-  const identifier = Buffer.from([184, 87, 23, 193, 156, 238, 175, 119]);
-  const data = identifier;
-  const ix = new TransactionInstruction({ keys, programId, data });
+  const data = DISCRIMINATOR;
+  const ix: Instruction = { accounts: keys, programAddress, data };
   return ix;
 }
