@@ -157,7 +157,7 @@ export function updateOrder(
   programId: PublicKey,
 ): TransactionInstruction {
   let args: UpdateOrderArgs = {
-    mode,
+    mode: mode.discriminator,
     value: encodedUpdateOrderValue(mode, value),
   };
   let accounts: Instructions.UpdateOrderAccounts = {

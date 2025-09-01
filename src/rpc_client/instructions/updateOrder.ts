@@ -9,7 +9,7 @@ import * as types from "../types"; // eslint-disable-line @typescript-eslint/no-
 import { PROGRAM_ID } from "../programId";
 
 export interface UpdateOrderArgs {
-  mode: types.UpdateOrderModeKind;
+  mode: number;
   value: Uint8Array;
 }
 
@@ -19,10 +19,7 @@ export interface UpdateOrderAccounts {
   order: PublicKey;
 }
 
-export const layout = borsh.struct([
-  types.UpdateOrderMode.layout("mode"),
-  borsh.vecU8("value"),
-]);
+export const layout = borsh.struct([borsh.u16("mode"), borsh.vecU8("value")]);
 
 export function updateOrder(
   args: UpdateOrderArgs,
@@ -38,7 +35,7 @@ export function updateOrder(
   const buffer = Buffer.alloc(1000);
   const len = layout.encode(
     {
-      mode: args.mode.toEncodable(),
+      mode: args.mode,
       value: Buffer.from(
         args.value.buffer,
         args.value.byteOffset,

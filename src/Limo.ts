@@ -1,4 +1,11 @@
-import { AnchorProvider, BorshInstructionCoder, Idl, Instruction, Program, Provider } from "@coral-xyz/anchor";
+import {
+  AnchorProvider,
+  BorshInstructionCoder,
+  Idl,
+  Instruction,
+  Program,
+  Provider,
+} from "@coral-xyz/anchor";
 import LIMO_IDL from "./rpc_client/limo.json";
 import BN from "bn.js";
 
@@ -3052,7 +3059,10 @@ export function decodeLimoInstruction(
   instructionData: Buffer,
   programId?: PublicKey,
 ): Instruction | null {
-  const limoProgram = new Program(LIMO_IDL as Idl, programId ? programId : PROGRAM_ID);
+  const limoProgram = new Program(
+    LIMO_IDL as Idl,
+    programId ? programId : PROGRAM_ID,
+  );
 
   const coder = new BorshInstructionCoder(limoProgram.idl);
   const decodedInstruction = coder.decode(instructionData);

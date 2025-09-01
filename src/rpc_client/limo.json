@@ -170,9 +170,7 @@
       "args": [
         {
           "name": "mode",
-          "type": {
-            "defined": "UpdateOrderMode"
-          }
+          "type": "u16"
         },
         {
           "name": "value",
