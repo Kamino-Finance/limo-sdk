@@ -9,9 +9,9 @@ import {
 } from "../utils";
 import { LimoClient } from "../Limo";
 import Decimal from "decimal.js";
-import BN from "bn.js";
 import { Address, address } from "@solana/kit";
 import { Base58EncodedBytes } from "@solana/kit/dist/types";
+import { BN } from "@coral-xyz/anchor/dist/cjs";
 
 export async function listOrders(
   quoteToken: string | undefined,

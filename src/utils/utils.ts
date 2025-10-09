@@ -9,7 +9,6 @@ import { PROGRAM_ID } from "../rpc_client/programId";
 
 // @ts-ignore
 import { Order } from "../rpc_client/accounts";
-import BN from "bn.js";
 import {
   AccountRole,
   address,
@@ -60,6 +59,7 @@ import {
   generateKeyPairSigner,
 } from "@solana/signers";
 import { fetchMint } from "@solana-program/token-2022";
+import { BN } from "@coral-xyz/anchor/dist/cjs";
 
 export const DEFAULT_ADDRESS = address("11111111111111111111111111111111");
 export const DEFAULT_TXN_FEE_LAMPORTS = 5000;
@@ -615,7 +615,7 @@ export function subscriptionEndpointFromCluster(
   }
 
   if (cluster) {
-    return cluster;
+    return cluster.replace(/^https?:\/\//, "wss://");
   }
 
   return "err";

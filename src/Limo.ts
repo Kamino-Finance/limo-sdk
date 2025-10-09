@@ -1,5 +1,3 @@
-import BN from "bn.js";
-
 import {
   amountToLamportsBN,
   asOption,
@@ -36,7 +34,6 @@ import * as limoOperations from "./utils/operations";
 import { GlobalConfig, Order } from "./rpc_client/accounts";
 import Decimal from "decimal.js";
 import { UpdateGlobalConfigMode, UpdateOrderMode } from "./rpc_client/types";
-import base58 from "bs58";
 import {
   assertUserSwapBalancesEnd,
   assertUserSwapBalancesStart,
@@ -80,6 +77,7 @@ import {
   TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
 import { AccountMeta } from "@solana/instructions/dist/types/accounts";
+import { BN } from "@coral-xyz/anchor";
 import {
   getTransferSolInstruction,
   SYSTEM_PROGRAM_ADDRESS,
@@ -88,6 +86,7 @@ import {
   SYSVAR_INSTRUCTIONS_ADDRESS,
   SYSVAR_RENT_ADDRESS,
 } from "@solana/sysvars";
+import base58 from "bs58";
 
 export const limoId = address("LiMoM9rMhrdYrfzUCxQppvxCSG1FcrUK9G8uLq4A1GF");
 
@@ -1509,6 +1508,7 @@ export class LimoClient {
       inputMintProgramId,
       outputMintProgramId,
       globalConfigOverride,
+      true,
     );
   }
 
@@ -1613,6 +1613,7 @@ export class LimoClient {
       inputMintProgramId,
       outputMintProgramId,
       globalConfigOverride,
+      true,
     );
   }
 
@@ -2632,6 +2633,7 @@ export class LimoClient {
       inputMintProgramId,
       outputMintProgramId,
       globalConfigOverride,
+      true,
     );
 
     return [[...closeOrderIx, ...createOrderIx], orderKeypair];
