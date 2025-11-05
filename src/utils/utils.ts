@@ -315,6 +315,7 @@ export async function createAssociatedTokenAccountIdempotentInstruction(
       payer: actualPayer,
       mint,
       owner: ownerAddress,
+      tokenProgram: tokenProgramAddress,
     });
 
   // - discriminator 0: regular create (fails if account exists)
