@@ -26,20 +26,32 @@ import {
   OrderStateAndAddress,
   printMultisigTx,
   printSimulateTx,
+  SendableSignedTransaction,
   SolanaKitFilter,
   withdrawHostTipIx,
 } from "./utils";
 
+// Imported from the leaf module directly to avoid the Limo.ts <-> utils/utils.ts cycle.
+import { getLimoProgramId } from "./utils/programId";
 import * as limoOperations from "./utils/operations";
-import { GlobalConfig, Order } from "./rpc_client/accounts";
 import Decimal from "decimal.js";
-import { UpdateGlobalConfigMode, UpdateOrderMode } from "./rpc_client/types";
+import { UpdateGlobalConfigMode, UpdateOrderMode } from "./utils/programModes";
 import {
-  assertUserSwapBalancesEnd,
-  assertUserSwapBalancesStart,
-  logUserSwapBalancesEnd,
-  logUserSwapBalancesStart,
-} from "./rpc_client/instructions";
+  getAssertUserSwapBalancesEndInstruction,
+  getAssertUserSwapBalancesStartInstruction,
+  getLogUserSwapBalancesEndInstruction,
+  getLogUserSwapBalancesStartInstruction,
+} from "./rpc_client/generated/instructions";
+import {
+  fetchMaybeGlobalConfig,
+  fetchMaybeOrder,
+  getGlobalConfigDecoder,
+  getGlobalConfigSize,
+  getOrderDecoder,
+  getOrderSize,
+  GlobalConfig,
+  Order,
+} from "./rpc_client/generated/accounts";
 import {
   AccountRole,
   Address,
@@ -109,11 +121,13 @@ export class LimoClient {
     subscription: RpcSubscriptions<SolanaRpcSubscriptionsApi>,
     globalConfig: Address | undefined,
     globalConfigState?: GlobalConfig,
+    programId?: Address,
   ) {
     this._connection = connection;
     this._subscription = subscription;
     this._globalConfig = globalConfig ?? DEFAULT_ADDRESS;
-    this.programAddress = limoId;
+    // Honors the LIMO_PROGRAM_ID override (e.g. staging); defaults to prod limoId.
+    this.programAddress = programId ?? getLimoProgramId();
 
     this.globalConfigState = globalConfigState;
   }
@@ -147,14 +161,14 @@ export class LimoClient {
     if (!this._globalConfig) {
       throw new Error("Global Config not set");
     }
-    const globalConfigState = await GlobalConfig.fetch(
+    const globalConfigState = await fetchMaybeGlobalConfig(
       this._connection,
       this._globalConfig,
     );
-    if (!globalConfigState) {
+    if (!globalConfigState.exists) {
       throw new Error("Global Config not found");
     }
-    this.globalConfigState = globalConfigState;
+    this.globalConfigState = globalConfigState.data;
     return this.globalConfigState;
   }
 
@@ -168,14 +182,14 @@ export class LimoClient {
       throw new Error("Global Config not set");
     }
     if (!this.globalConfigState) {
-      const globalConfigState = await GlobalConfig.fetch(
+      const globalConfigState = await fetchMaybeGlobalConfig(
         this._connection,
         this._globalConfig,
       );
-      if (!globalConfigState) {
+      if (!globalConfigState.exists) {
         throw new Error("Global Config not found");
       }
-      this.globalConfigState = globalConfigState;
+      this.globalConfigState = globalConfigState.data;
     }
     return this.globalConfigState;
   }
@@ -204,17 +218,13 @@ export class LimoClient {
    * @returns the order state
    */
   async getOrderState(orderAddress: Address): Promise<Order> {
-    const order = await Order.fetch(
-      this._connection,
-      orderAddress,
-      this.programAddress,
-    );
+    const order = await fetchMaybeOrder(this._connection, orderAddress);
 
-    if (!order) {
+    if (!order.exists) {
       throw new Error("Order not found");
     }
 
-    return order;
+    return order.data;
   }
 
   /**
@@ -241,7 +251,7 @@ export class LimoClient {
       });
     }
     filters.push({
-      dataSize: BigInt(Order.layout.span + 8),
+      dataSize: BigInt(getOrderSize()),
     });
     const orderProgramAccounts = await this._connection
       .getProgramAccounts(this.programAddress, {
@@ -259,11 +269,7 @@ export class LimoClient {
       }
 
       const buffer = Buffer.from(orderProgramAccount.account.data[0], "base64");
-      const order = Order.decode(buffer);
-
-      if (!order) {
-        throw Error("Could not parse obligation.");
-      }
+      const order = getOrderDecoder().decode(buffer);
 
       return {
         state: order,
@@ -591,15 +597,12 @@ export class LimoClient {
   }
 
   async getOrderDisplay(orderAddress: Address): Promise<OrderDisplay> {
-    const order = await Order.fetch(
-      this._connection,
-      orderAddress,
-      this.programAddress,
-    );
+    const orderAccount = await fetchMaybeOrder(this._connection, orderAddress);
 
-    if (!order) {
+    if (!orderAccount.exists) {
       throw new Error("Order not found");
     }
+    const order = orderAccount.data;
 
     const inputMintDecimals = await getMintDecimals(
       this._connection,
@@ -635,14 +638,14 @@ export class LimoClient {
     const ordersDisplay: OrderDisplay[] = [];
     for (const order of orders) {
       const inputMintDecimals = mintDecimals.get(order.state.inputMint);
-      if (!inputMintDecimals) {
+      if (inputMintDecimals === undefined) {
         throw new Error(
           "Mint decimals not found for mint + " +
             order.state.inputMint.toString(),
         );
       }
       const outputMintDecimals = mintDecimals.get(order.state.outputMint);
-      if (!outputMintDecimals) {
+      if (outputMintDecimals === undefined) {
         throw new Error(
           "Mint decimals not found for mint + " +
             order.state.outputMint.toString(),
@@ -679,7 +682,7 @@ export class LimoClient {
         expectedOutputAmountDecimal,
         remainingInputAmountDecimal,
         filledOutputAmountDecimal,
-        numberOfFills: order.state.numberOfFills.toNumber(),
+        numberOfFills: Number(order.state.numberOfFills),
         orderFillPct: orderFillPct,
         orderPriceInputToOutput: initialInputAmountDecimal.div(
           expectedOutputAmountDecimal,
@@ -804,16 +807,13 @@ export class LimoClient {
     const filledOrdersBuy: FilledOrder[] = [];
 
     for (const order of askOrders) {
-      if (
-        order.state.remainingInputAmount.toNumber() <
-        order.state.initialInputAmount.toNumber()
-      ) {
+      if (order.state.remainingInputAmount < order.state.initialInputAmount) {
         filledOrdersSell.push({
           address: order.address,
           orderDisplay: order,
           quoteTokenMint: quoteTokenMint,
           baseTokenMint: baseTokenMint,
-          time: order.state.lastUpdatedTimestamp.toNumber(),
+          time: Number(order.state.lastUpdatedTimestamp),
           price: order.executionPriceOutputToInput,
           size: order.filledOutputAmountDecimal,
           txid: "N/A",
@@ -823,16 +823,13 @@ export class LimoClient {
     }
 
     for (const order of bidOrders) {
-      if (
-        order.state.remainingInputAmount.toNumber() <
-        order.state.initialInputAmount.toNumber()
-      ) {
+      if (order.state.remainingInputAmount < order.state.initialInputAmount) {
         filledOrdersBuy.push({
           address: order.address,
           orderDisplay: order,
           quoteTokenMint: quoteTokenMint,
           baseTokenMint: baseTokenMint,
-          time: order.state.lastUpdatedTimestamp.toNumber(),
+          time: Number(order.state.lastUpdatedTimestamp),
           price: order.executionPriceInputToOutput,
           size: order.filledOutputAmountDecimal,
           txid: "N/A",
@@ -996,8 +993,8 @@ export class LimoClient {
       slot: Slot,
     ) => {
       if (
-        orderStateAndAddress.state.remainingInputAmount.toNumber() <
-        orderStateAndAddress.state.initialInputAmount.toNumber()
+        orderStateAndAddress.state.remainingInputAmount <
+        orderStateAndAddress.state.initialInputAmount
       ) {
         callbackOnChangeSellOrders(orderStateAndAddress, slot);
       }
@@ -1008,8 +1005,8 @@ export class LimoClient {
       slot: Slot,
     ) => {
       if (
-        orderStateAndAddress.state.remainingInputAmount.toNumber() <
-        orderStateAndAddress.state.initialInputAmount.toNumber()
+        orderStateAndAddress.state.remainingInputAmount <
+        orderStateAndAddress.state.initialInputAmount
       ) {
         callbackOnChangeBuyOrders(orderStateAndAddress, slot);
       }
@@ -1046,7 +1043,7 @@ export class LimoClient {
       },
     });
     filters.push({
-      dataSize: BigInt(Order.layout.span + 8),
+      dataSize: BigInt(getOrderSize()),
     });
 
     const callbackOnChangeWtihDecoding = async (
@@ -1065,11 +1062,7 @@ export class LimoClient {
       }
 
       const [base64Data, encoding] = keyedAccountInfo.account.data;
-      const order = Order.decode(Buffer.from(base64Data, encoding));
-
-      if (!order) {
-        throw Error("Could not parse obligation.");
-      }
+      const order = getOrderDecoder().decode(Buffer.from(base64Data, encoding));
 
       callbackOnChange(
         {
@@ -1118,7 +1111,7 @@ export class LimoClient {
   ): Promise<Instruction[]> {
     let ixs: Instruction[] = [];
 
-    const globalConfigSize = GlobalConfig.layout.span + 8;
+    const globalConfigSize = getGlobalConfigSize();
 
     const lamports = await this._connection
       .getMinimumBalanceForRentExemption(BigInt(globalConfigSize))
@@ -1297,7 +1290,7 @@ export class LimoClient {
       createKeypairRentExemptIxSync(
         user,
         order,
-        Order.layout.span + 8,
+        getOrderSize(),
         ORDER_RENT_EXEMPTION_LAMPORTS,
         this.programAddress,
       ),
@@ -1728,8 +1721,10 @@ export class LimoClient {
     let takerOutputAta: Address;
     if (order.state.outputMint === WRAPPED_SOL_MINT) {
       const outputExpectedOutForInputAmount = divCeil(
-        order.state.expectedOutputAmount.mul(inputAmountLamports),
-        order.state.initialInputAmount,
+        new BN(order.state.expectedOutputAmount.toString()).mul(
+          inputAmountLamports,
+        ),
+        new BN(order.state.initialInputAmount.toString()),
       );
 
       const { createIxs, fillIxs, closeIx, ata } =
@@ -1852,8 +1847,10 @@ export class LimoClient {
     );
 
     const outputExpectedOutForInputAmount = divCeil(
-      order.state.expectedOutputAmount.mul(inputAmountLamports),
-      order.state.initialInputAmount,
+      new BN(order.state.expectedOutputAmount.toString()).mul(
+        inputAmountLamports,
+      ),
+      new BN(order.state.initialInputAmount.toString()),
     );
 
     const log =
@@ -1935,8 +1932,10 @@ export class LimoClient {
     let takerOutputAta: Address;
     if (order.state.outputMint === WRAPPED_SOL_MINT) {
       const outputExpectedOutForInputAmount = divCeil(
-        order.state.expectedOutputAmount.mul(inputAmountLamports),
-        order.state.initialInputAmount,
+        new BN(order.state.expectedOutputAmount.toString()).mul(
+          inputAmountLamports,
+        ),
+        new BN(order.state.initialInputAmount.toString()),
       );
 
       const {
@@ -2072,8 +2071,10 @@ export class LimoClient {
       );
 
     const outputExpectedOutForInputAmount = divCeil(
-      order.state.expectedOutputAmount.mul(inputAmountLamports),
-      order.state.initialInputAmount,
+      new BN(order.state.expectedOutputAmount.toString()).mul(
+        inputAmountLamports,
+      ),
+      new BN(order.state.initialInputAmount.toString()),
     );
 
     const log =
@@ -2140,50 +2141,15 @@ export class LimoClient {
       voteAccount,
     } = args;
 
-    const logIxStart = logUserSwapBalancesStart({
-      baseAccounts: {
+    const logIxStart = getLogUserSwapBalancesStartInstruction(
+      {
         maker: user,
         inputMint,
         outputMint,
         inputTa,
         outputTa,
-        pdaReferrer: asOption(pdaReferrer),
+        pdaReferrer,
         swapProgramId: swapProgarmId,
-      },
-      userSwapBalanceState: await getUserSwapBalanceStatePDA(
-        user.address,
-        this.programAddress,
-      ),
-      eventAuthority: await getEventAuthorityPDA(this.programAddress),
-      program: this.programAddress,
-      systemProgram: SYSTEM_PROGRAM_ADDRESS,
-      rent: SYSVAR_RENT_ADDRESS,
-      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
-    });
-
-    const padding: number[] = Array(2).fill(0);
-
-    const logIxEnd = logUserSwapBalancesEnd(
-      {
-        simulatedSwapAmountOut,
-        simulatedTs,
-        minimumAmountOut,
-        swapAmountIn,
-        simulatedAmountOutNextBest,
-        aggregator: aggregatorId,
-        nextBestAggregator: nextBestAggregatorId,
-        padding,
-      },
-      {
-        baseAccounts: {
-          maker: user,
-          inputMint,
-          outputMint,
-          inputTa,
-          outputTa,
-          pdaReferrer: asOption(pdaReferrer),
-          swapProgramId: swapProgarmId,
-        },
         userSwapBalanceState: await getUserSwapBalanceStatePDA(
           user.address,
           this.programAddress,
@@ -2194,6 +2160,39 @@ export class LimoClient {
         rent: SYSVAR_RENT_ADDRESS,
         sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
       },
+      { programAddress: this.programAddress },
+    );
+
+    const logIxEnd = getLogUserSwapBalancesEndInstruction(
+      {
+        maker: user,
+        inputMint,
+        outputMint,
+        inputTa,
+        outputTa,
+        pdaReferrer,
+        swapProgramId: swapProgarmId,
+        userSwapBalanceState: await getUserSwapBalanceStatePDA(
+          user.address,
+          this.programAddress,
+        ),
+        eventAuthority: await getEventAuthorityPDA(this.programAddress),
+        program: this.programAddress,
+        systemProgram: SYSTEM_PROGRAM_ADDRESS,
+        rent: SYSVAR_RENT_ADDRESS,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
+        simulatedSwapAmountOut: BigInt(simulatedSwapAmountOut.toString()),
+        simulatedTs: BigInt(simulatedTs.toString()),
+        minimumAmountOut: BigInt(minimumAmountOut.toString()),
+        swapAmountIn: BigInt(swapAmountIn.toString()),
+        simulatedAmountOutNextBest: BigInt(
+          simulatedAmountOutNextBest.toString(),
+        ),
+        aggregator: aggregatorId,
+        nextBestAggregator: nextBestAggregatorId,
+        padding: new Uint8Array(2),
+      },
+      { programAddress: this.programAddress },
     );
 
     let finalLogIxStart: Instruction;
@@ -2349,21 +2348,7 @@ export class LimoClient {
       this.programAddress,
     );
 
-    const logIxStart = assertUserSwapBalancesStart({
-      maker: user,
-      inputTa: inputMintTa,
-      outputTa: outputMintTa,
-      userSwapBalanceState,
-      systemProgram: SYSTEM_PROGRAM_ADDRESS,
-      rent: SYSVAR_RENT_ADDRESS,
-      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
-    });
-
-    const logIxEnd = assertUserSwapBalancesEnd(
-      {
-        maxInputAmountChange,
-        minOutputAmountChange,
-      },
+    const logIxStart = getAssertUserSwapBalancesStartInstruction(
       {
         maker: user,
         inputTa: inputMintTa,
@@ -2373,6 +2358,22 @@ export class LimoClient {
         rent: SYSVAR_RENT_ADDRESS,
         sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
       },
+      { programAddress: this.programAddress },
+    );
+
+    const logIxEnd = getAssertUserSwapBalancesEndInstruction(
+      {
+        maker: user,
+        inputTa: inputMintTa,
+        outputTa: outputMintTa,
+        userSwapBalanceState,
+        systemProgram: SYSTEM_PROGRAM_ADDRESS,
+        rent: SYSVAR_RENT_ADDRESS,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
+        maxInputAmountChange: BigInt(maxInputAmountChange.toString()),
+        minOutputAmountChange: BigInt(minOutputAmountChange.toString()),
+      },
+      { programAddress: this.programAddress },
     );
 
     return {
@@ -2578,13 +2579,16 @@ export class LimoClient {
       order.address.toString() +
       " claiming " +
       lamportsToAmountBN(
-        order.state.remainingInputAmount,
+        new BN(order.state.remainingInputAmount.toString()),
         inputMintDecimals,
       ).toString() +
       " input token ";
     order.state.inputMint.toString().slice(0, 5) +
       " and " +
-      lamportsToAmountBN(order.state.tipAmount, tipMintDecimals).toString();
+      lamportsToAmountBN(
+        new BN(order.state.tipAmount.toString()),
+        tipMintDecimals,
+      ).toString();
     (" tip ");
 
     const sig = await this.processTxn(maker, ixs, mode, log, []);
@@ -3004,7 +3008,9 @@ export class LimoClient {
     await sendAndConfirmTransactionFactory({
       rpc: this._connection,
       rpcSubscriptions: this._subscription,
-    })(signedTransaction, { commitment: "confirmed" });
+    })(signedTransaction as SendableSignedTransaction, {
+      commitment: "confirmed",
+    });
 
     return getSignatureFromTransaction(signedTransaction);
   }

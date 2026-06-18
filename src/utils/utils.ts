@@ -4,11 +4,11 @@ import {
 } from "@solana-program/compute-budget";
 import { Decimal } from "decimal.js";
 import { LimoClient, limoId, WRAPPED_SOL_MINT } from "../Limo";
-import { GlobalConfig } from "../rpc_client/accounts";
-import { PROGRAM_ID } from "../rpc_client/programId";
-
-// @ts-ignore
-import { Order } from "../rpc_client/accounts";
+import {
+  fetchMaybeGlobalConfig,
+  getOrderSize,
+  GlobalConfig,
+} from "../rpc_client/generated/accounts";
 import {
   AccountRole,
   address,
@@ -64,6 +64,12 @@ import { BN } from "@coral-xyz/anchor/dist/cjs";
 export const DEFAULT_ADDRESS = address("11111111111111111111111111111111");
 export const DEFAULT_TXN_FEE_LAMPORTS = 5000;
 
+// kit v6 narrowed the sender input; bridges the gap since every call site sets a
+// blockhash lifetime before signing.
+export type SendableSignedTransaction = Parameters<
+  ReturnType<typeof sendAndConfirmTransactionFactory>
+>[0];
+
 const ESCROW_VAULT_SEED = "escrow_vault";
 const GLOBAL_AUTH_SEED = "authority";
 const EXPRESS_RELAY_MEATADATA_SEED = "metadata";
@@ -99,10 +105,6 @@ export class TokenInfo {
 export interface UserAccounts {
   owner: TransactionSigner;
   tokenAtas: Map<string, Address>;
-}
-
-export function getLimoProgramId() {
-  return PROGRAM_ID;
 }
 
 export async function parseKeypairFile(
@@ -184,7 +186,7 @@ export async function createMintFromKeypair(
     await signTransactionMessageWithSigners(transactionMessage);
 
   await sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: rpcWs })(
-    signedTransaction,
+    signedTransaction as SendableSignedTransaction,
     { commitment: "confirmed" },
   );
   return mint.address;
@@ -381,7 +383,7 @@ export async function setupAta(
       await signTransactionMessageWithSigners(transactionMessage);
 
     await sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: rpcWs })(
-      signedTransaction,
+      signedTransaction as SendableSignedTransaction,
       { commitment: "confirmed" },
     );
   }
@@ -421,7 +423,10 @@ export async function mintTo(
   await sendAndConfirmTransactionFactory({
     rpc,
     rpcSubscriptions: rpcWs,
-  })(signedTransaction, { commitment: "confirmed", skipPreflight: true });
+  })(signedTransaction as SendableSignedTransaction, {
+    commitment: "confirmed",
+    skipPreflight: true,
+  });
 }
 
 export async function getMockSwapInstructions(
@@ -626,10 +631,10 @@ export async function fetchGlobalConfigWithRetry(
   rpc: Rpc<SolanaRpcApi>,
   address: Address,
 ): Promise<GlobalConfig> {
-  return fetchWithRetry(
-    async () => await GlobalConfig.fetch(rpc, address),
-    address,
-  );
+  return fetchWithRetry(async () => {
+    const account = await fetchMaybeGlobalConfig(rpc, address);
+    return account.exists ? account.data : null;
+  }, address);
 }
 
 export async function getPdaAuthority(
@@ -764,7 +769,7 @@ export async function getOrderRentExemptLamports(
   rpc: Rpc<SolanaRpcApi>,
 ): Promise<Lamports> {
   return await rpc
-    .getMinimumBalanceForRentExemption(BigInt(Order.layout.span + 8))
+    .getMinimumBalanceForRentExemption(BigInt(getOrderSize()))
     .send();
 }
 
@@ -809,7 +814,7 @@ export async function executeTransaction(
   );
 
   await sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: rpcWs })(
-    signedTransaction,
+    signedTransaction as SendableSignedTransaction,
     { commitment: "confirmed" },
   );
   return getSignatureFromTransaction(signedTransaction);

@@ -1,4 +1,4 @@
-import { GlobalConfig } from "../rpc_client/accounts";
+import { fetchMaybeGlobalConfig } from "../rpc_client/generated/accounts";
 import { initializeClient } from "./utils";
 import { getLimoProgramId, getTokenVaultPDA, parseKeypairFile } from "../utils";
 import { LimoClient } from "../Limo";
@@ -17,15 +17,14 @@ export async function initGlobalConfigCommand(globalConfigFilePath?: string) {
   const client = new LimoClient(env.rpc, env.rpcWs, undefined);
   await client.createGlobalConfig(env.admin, globalConfig);
 
-  let globalConfigState: GlobalConfig | null = await GlobalConfig.fetch(
+  const globalConfigState = await fetchMaybeGlobalConfig(
     env.rpc,
     globalConfig.address,
-    env.programAddress,
   );
   console.log(
     "Global Config",
     globalConfig.toString(),
-    globalConfigState?.toJSON(),
+    globalConfigState.exists ? globalConfigState.data : null,
   );
 }
 

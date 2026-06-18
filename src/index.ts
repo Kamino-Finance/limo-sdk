@@ -1,4 +1,3 @@
+// Public surface is the LimoClient wrapper only.
+// The generated client tree (rpc_client/generated) is internal and not re-exported.
 export * from "./Limo";
-export * from "./rpc_client/types";
-export * from "./rpc_client/accounts";
-export * from "./rpc_client/instructions";

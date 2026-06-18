@@ -1,7 +1,17 @@
-import * as Instructions from "../rpc_client/instructions";
-import { UpdateOrderArgs } from "../rpc_client/instructions";
 import {
-  asOption,
+  getCloseOrderAndClaimTipInstruction,
+  getCreateOrderInstruction,
+  getFlashTakeOrderEndInstruction,
+  getFlashTakeOrderStartInstruction,
+  getInitializeGlobalConfigInstruction,
+  getInitializeVaultInstruction,
+  getTakeOrderInstruction,
+  getUpdateGlobalConfigAdminInstruction,
+  getUpdateGlobalConfigInstruction,
+  getUpdateOrderInstruction,
+  getWithdrawHostTipInstruction,
+} from "../rpc_client/generated/instructions";
+import {
   getAssociatedTokenAddress,
   getEventAuthorityPDA,
   getExpressRelayConfigRouterPDA,
@@ -14,8 +24,8 @@ import {
   UpdateGlobalConfigModeKind,
   UpdateOrderMode,
   UpdateOrderModeKind,
-} from "../rpc_client/types/index";
-import { GlobalConfig } from "../rpc_client/accounts";
+} from "./programModes";
+import { GlobalConfig } from "../rpc_client/generated/accounts";
 import {
   Address,
   getAddressEncoder,
@@ -28,6 +38,11 @@ import {
   SYSVAR_RENT_ADDRESS,
 } from "@solana/sysvars";
 import BN from "bn.js";
+
+// SDK surface uses BN; Codama builders want number | bigint.
+function big(value: BN): bigint {
+  return BigInt(value.toString());
+}
 
 export interface OrderParams {
   quoteTokenMint: Address;
@@ -43,15 +58,14 @@ export function initializeGlobalConfig(
   pdaAuthority: Address,
   programId: Address,
 ): Instruction {
-  let accounts: Instructions.InitializeGlobalConfigAccounts = {
-    adminAuthority,
-    pdaAuthority,
-    globalConfig,
-  };
-
-  let ix = Instructions.initializeGlobalConfig(accounts, [], programId);
-
-  return ix;
+  return getInitializeGlobalConfigInstruction(
+    {
+      adminAuthority,
+      pdaAuthority,
+      globalConfig,
+    },
+    { programAddress: programId },
+  );
 }
 
 export async function initializeVault(
@@ -63,19 +77,19 @@ export async function initializeVault(
 ): Promise<Instruction> {
   let vault = await getTokenVaultPDA(programAddress, globalConfig, mint);
   let pdaAuthority = await getPdaAuthority(programAddress, globalConfig);
-  let accounts: Instructions.InitializeVaultAccounts = {
-    payer: owner,
-    globalConfig,
-    pdaAuthority,
-    mint,
-    vault,
-    tokenProgram: mintProgramId,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-  };
 
-  let ix = Instructions.initializeVault(accounts, [], programAddress);
-
-  return ix;
+  return getInitializeVaultInstruction(
+    {
+      payer: owner,
+      globalConfig,
+      pdaAuthority,
+      mint,
+      vault,
+      tokenProgram: mintProgramId,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    },
+    { programAddress },
+  );
 }
 
 export async function createOrder(
@@ -99,61 +113,60 @@ export async function createOrder(
   );
 
   let pdaAuthority = await getPdaAuthority(programAddress, globalConfig);
-  let accounts: Instructions.CreateOrderAccounts = {
-    maker,
-    globalConfig,
-    pdaAuthority,
-    order,
-    inputMint:
-      orderParams.side === "bid"
-        ? orderParams.baseTokenMint
-        : orderParams.quoteTokenMint,
-    outputMint:
-      orderParams.side === "bid"
-        ? orderParams.quoteTokenMint
-        : orderParams.baseTokenMint,
-    makerAta:
-      orderParams.side === "bid"
-        ? await getAssociatedTokenAddress(
-            maker.address,
-            orderParams.baseTokenMint,
-            baseTokenMintProgramId,
-          )
-        : await getAssociatedTokenAddress(
-            maker.address,
-            orderParams.quoteTokenMint,
-            quoteTokenMintProgramId,
-          ),
-    inputVault: orderParams.side === "bid" ? baseTokenVault : quoteTokenVault,
-    inputTokenProgram:
-      orderParams.side === "bid"
-        ? baseTokenMintProgramId
-        : quoteTokenMintProgramId,
-    outputTokenProgram:
-      orderParams.side === "bid"
-        ? quoteTokenMintProgramId
-        : baseTokenMintProgramId,
-    eventAuthority: await getEventAuthorityPDA(programAddress),
-    program: programAddress,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-  };
 
-  let args: Instructions.CreateOrderArgs = {
-    inputAmount: new BN(
-      orderParams.side === "bid"
-        ? orderParams.baseTokenAmount
-        : orderParams.quoteTokenAmount,
-    ),
-    outputAmount: new BN(
-      orderParams.side === "bid"
-        ? orderParams.quoteTokenAmount
-        : orderParams.baseTokenAmount,
-    ),
-    orderType: orderParams.side === "bid" ? 0 : 1,
-  };
-  let ix = Instructions.createOrder(args, accounts, [], programAddress);
+  let inputAmount =
+    orderParams.side === "bid"
+      ? orderParams.baseTokenAmount
+      : orderParams.quoteTokenAmount;
+  let outputAmount =
+    orderParams.side === "bid"
+      ? orderParams.quoteTokenAmount
+      : orderParams.baseTokenAmount;
 
-  return ix;
+  return getCreateOrderInstruction(
+    {
+      maker,
+      globalConfig,
+      pdaAuthority,
+      order,
+      inputMint:
+        orderParams.side === "bid"
+          ? orderParams.baseTokenMint
+          : orderParams.quoteTokenMint,
+      outputMint:
+        orderParams.side === "bid"
+          ? orderParams.quoteTokenMint
+          : orderParams.baseTokenMint,
+      makerAta:
+        orderParams.side === "bid"
+          ? await getAssociatedTokenAddress(
+              maker.address,
+              orderParams.baseTokenMint,
+              baseTokenMintProgramId,
+            )
+          : await getAssociatedTokenAddress(
+              maker.address,
+              orderParams.quoteTokenMint,
+              quoteTokenMintProgramId,
+            ),
+      inputVault: orderParams.side === "bid" ? baseTokenVault : quoteTokenVault,
+      inputTokenProgram:
+        orderParams.side === "bid"
+          ? baseTokenMintProgramId
+          : quoteTokenMintProgramId,
+      outputTokenProgram:
+        orderParams.side === "bid"
+          ? quoteTokenMintProgramId
+          : baseTokenMintProgramId,
+      eventAuthority: await getEventAuthorityPDA(programAddress),
+      program: programAddress,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      inputAmount: big(inputAmount),
+      outputAmount: big(outputAmount),
+      orderType: orderParams.side === "bid" ? 0 : 1,
+    },
+    { programAddress },
+  );
 }
 
 export function updateOrder(
@@ -164,19 +177,16 @@ export function updateOrder(
   order: Address,
   programAddress: Address,
 ): Instruction {
-  let args: UpdateOrderArgs = {
-    mode: mode.discriminator,
-    value: encodedUpdateOrderValue(mode, value),
-  };
-  let accounts: Instructions.UpdateOrderAccounts = {
-    maker,
-    globalConfig,
-    order,
-  };
-
-  let ix = Instructions.updateOrder(args, accounts, [], programAddress);
-
-  return ix;
+  return getUpdateOrderInstruction(
+    {
+      maker,
+      globalConfig,
+      order,
+      mode: mode.discriminator,
+      value: encodedUpdateOrderValue(mode, value),
+    },
+    { programAddress },
+  );
 }
 
 export async function takeOrder(params: {
@@ -209,47 +219,42 @@ export async function takeOrder(params: {
     params.inputMint,
   );
 
-  let accounts: Instructions.TakeOrderAccounts = {
-    taker: params.taker,
-    maker: params.maker,
-    globalConfig: params.globalConfig,
-    pdaAuthority,
-    order: params.order,
-    inputMint: params.inputMint,
-    outputMint: params.outputMint,
-    inputVault,
-    expressRelay: params.expressRelayProgramId,
-    expressRelayMetadata: await getExpressRelayMetadataPDA(
-      params.expressRelayProgramId,
-    ),
-    permission: asOption(params.permissionless ? undefined : params.order),
-    configRouter: await getExpressRelayConfigRouterPDA(
-      params.expressRelayProgramId,
+  return getTakeOrderInstruction(
+    {
+      taker: params.taker,
+      maker: params.maker,
+      globalConfig: params.globalConfig,
       pdaAuthority,
-    ),
-    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
-    takerInputAta: params.takerInputAta,
-    intermediaryOutputTokenAccount: asOption(
-      params.intermediaryOutputTokenAccount,
-    ),
-    takerOutputAta: params.takerOutputAta,
-    makerOutputAta: asOption(params.makerOutputAta),
-    inputTokenProgram: params.inputTokenProgram,
-    outputTokenProgram: params.outputTokenProgram,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-    rent: SYSVAR_RENT_ADDRESS,
-    eventAuthority: await getEventAuthorityPDA(params.programAddress),
-    program: params.programAddress,
-  };
-
-  let args: Instructions.TakeOrderArgs = {
-    inputAmount: params.inputAmountLamports,
-    minOutputAmount: params.minOutputAmountLamports,
-    tipAmountPermissionlessTaking: params.permissionlessTipLamports,
-  };
-  let ix = Instructions.takeOrder(args, accounts, [], params.programAddress);
-
-  return ix;
+      order: params.order,
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      inputVault,
+      expressRelay: params.expressRelayProgramId,
+      expressRelayMetadata: await getExpressRelayMetadataPDA(
+        params.expressRelayProgramId,
+      ),
+      permission: params.permissionless ? undefined : params.order,
+      configRouter: await getExpressRelayConfigRouterPDA(
+        params.expressRelayProgramId,
+        pdaAuthority,
+      ),
+      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
+      takerInputAta: params.takerInputAta,
+      intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
+      takerOutputAta: params.takerOutputAta,
+      makerOutputAta: params.makerOutputAta,
+      inputTokenProgram: params.inputTokenProgram,
+      outputTokenProgram: params.outputTokenProgram,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      rent: SYSVAR_RENT_ADDRESS,
+      eventAuthority: await getEventAuthorityPDA(params.programAddress),
+      program: params.programAddress,
+      inputAmount: big(params.inputAmountLamports),
+      minOutputAmount: big(params.minOutputAmountLamports),
+      tipAmountPermissionlessTaking: big(params.permissionlessTipLamports),
+    },
+    { programAddress: params.programAddress },
+  );
 }
 
 export async function flashTakeOrder(params: {
@@ -282,7 +287,8 @@ export async function flashTakeOrder(params: {
     params.inputMint,
   );
 
-  let startAccounts: Instructions.FlashTakeOrderStartAccounts = {
+  // Same accounts for both flash instructions.
+  let commonAccounts = {
     taker: params.taker,
     maker: params.maker,
     globalConfig: params.globalConfig,
@@ -295,7 +301,7 @@ export async function flashTakeOrder(params: {
     expressRelayMetadata: await getExpressRelayMetadataPDA(
       params.expressRelayProgramId,
     ),
-    permission: asOption(params.permissionless ? undefined : params.order),
+    permission: params.permissionless ? undefined : params.order,
     configRouter: await getExpressRelayConfigRouterPDA(
       params.expressRelayProgramId,
       pdaAuthority,
@@ -303,10 +309,8 @@ export async function flashTakeOrder(params: {
     sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
     takerInputAta: params.takerInputAta,
     takerOutputAta: params.takerOutputAta,
-    intermediaryOutputTokenAccount: asOption(
-      params.intermediaryOutputTokenAccount,
-    ),
-    makerOutputAta: asOption(params.makerOutputAta),
+    intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
+    makerOutputAta: params.makerOutputAta,
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
     systemProgram: SYSTEM_PROGRAM_ADDRESS,
@@ -315,63 +319,22 @@ export async function flashTakeOrder(params: {
     program: params.programAddress,
   };
 
-  let startArgs: Instructions.FlashTakeOrderStartArgs = {
-    inputAmount: new BN(params.inputAmountLamports),
-    minOutputAmount: new BN(params.minOutputAmountLamports),
-    tipAmountPermissionlessTaking:
+  let args = {
+    inputAmount: big(params.inputAmountLamports),
+    minOutputAmount: big(params.minOutputAmountLamports),
+    tipAmountPermissionlessTaking: big(
       params.permissionlessTipLamports ?? new BN(0),
+    ),
   };
-  let startIx = Instructions.flashTakeOrderStart(
-    startArgs,
-    startAccounts,
-    [],
-    params.programAddress,
+
+  let startIx = getFlashTakeOrderStartInstruction(
+    { ...commonAccounts, ...args },
+    { programAddress: params.programAddress },
   );
 
-  let endAccounts: Instructions.FlashTakeOrderEndAccounts = {
-    taker: params.taker,
-    maker: params.maker,
-    globalConfig: params.globalConfig,
-    pdaAuthority,
-    order: params.order,
-    inputMint: params.inputMint,
-    outputMint: params.outputMint,
-    inputVault,
-    expressRelay: params.expressRelayProgramId,
-    expressRelayMetadata: await getExpressRelayMetadataPDA(
-      params.expressRelayProgramId,
-    ),
-    permission: asOption(params.permissionless ? undefined : params.order),
-    configRouter: await getExpressRelayConfigRouterPDA(
-      params.expressRelayProgramId,
-      pdaAuthority,
-    ),
-    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
-    takerInputAta: params.takerInputAta,
-    takerOutputAta: params.takerOutputAta,
-    intermediaryOutputTokenAccount: asOption(
-      params.intermediaryOutputTokenAccount,
-    ),
-    makerOutputAta: asOption(params.makerOutputAta),
-    inputTokenProgram: params.inputTokenProgram,
-    outputTokenProgram: params.outputTokenProgram,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-    rent: SYSVAR_RENT_ADDRESS,
-    eventAuthority: await getEventAuthorityPDA(params.programAddress),
-    program: params.programAddress,
-  };
-
-  let endArgs: Instructions.FlashTakeOrderEndArgs = {
-    inputAmount: new BN(params.inputAmountLamports),
-    minOutputAmount: new BN(params.minOutputAmountLamports),
-    tipAmountPermissionlessTaking:
-      params.permissionlessTipLamports ?? new BN(0),
-  };
-  let endIx = Instructions.flashTakeOrderEnd(
-    endArgs,
-    endAccounts,
-    [],
-    params.programAddress,
+  let endIx = getFlashTakeOrderEndInstruction(
+    { ...commonAccounts, ...args },
+    { programAddress: params.programAddress },
   );
 
   return {
@@ -400,28 +363,23 @@ export async function closeOrderAndClaimTip(params: {
     params.inputMint,
   );
 
-  let accounts: Instructions.CloseOrderAndClaimTipAccounts = {
-    maker: params.maker,
-    order: params.order,
-    globalConfig: params.globalConfig,
-    pdaAuthority,
-    inputMint: params.inputMint,
-    outputMint: params.outputMint,
-    makerInputAta: params.makerInputAta,
-    inputVault,
-    inputTokenProgram: params.inputTokenProgram,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-    eventAuthority: await getEventAuthorityPDA(params.programAddress),
-    program: params.programAddress,
-  };
-
-  let ix = Instructions.closeOrderAndClaimTip(
-    accounts,
-    [],
-    params.programAddress,
+  return getCloseOrderAndClaimTipInstruction(
+    {
+      maker: params.maker,
+      order: params.order,
+      globalConfig: params.globalConfig,
+      pdaAuthority,
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      makerInputAta: params.makerInputAta,
+      inputVault,
+      inputTokenProgram: params.inputTokenProgram,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      eventAuthority: await getEventAuthorityPDA(params.programAddress),
+      program: params.programAddress,
+    },
+    { programAddress: params.programAddress },
   );
-
-  return ix;
 }
 
 export async function withdrawHostTipIx(params: {
@@ -434,16 +392,15 @@ export async function withdrawHostTipIx(params: {
     params.globalConfig,
   );
 
-  let accounts: Instructions.WithdrawHostTipAccounts = {
-    adminAuthority: params.admin,
-    globalConfig: params.globalConfig,
-    pdaAuthority,
-    systemProgram: SYSTEM_PROGRAM_ADDRESS,
-  };
-
-  let ix = Instructions.withdrawHostTip(accounts, [], params.programAddress);
-
-  return ix;
+  return getWithdrawHostTipInstruction(
+    {
+      adminAuthority: params.admin,
+      globalConfig: params.globalConfig,
+      pdaAuthority,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    },
+    { programAddress: params.programAddress },
+  );
 }
 
 export function updateGlobalConfigIx(
@@ -453,19 +410,15 @@ export function updateGlobalConfigIx(
   value: number | Address,
   programAddress: Address,
 ): Instruction {
-  let accounts: Instructions.UpdateGlobalConfigAccounts = {
-    adminAuthority: admin,
-    globalConfig,
-  };
-
-  let args: Instructions.UpdateGlobalConfigArgs = {
-    mode: mode.discriminator,
-    value: encodedUpdateGlobalConfigValue(mode, value),
-  };
-
-  let ix = Instructions.updateGlobalConfig(args, accounts, [], programAddress);
-
-  return ix;
+  return getUpdateGlobalConfigInstruction(
+    {
+      adminAuthority: admin,
+      globalConfig,
+      mode: mode.discriminator,
+      value: encodedUpdateGlobalConfigValue(mode, value),
+    },
+    { programAddress },
+  );
 }
 
 export function updateGlobalConfigAdminIx(
@@ -474,16 +427,15 @@ export function updateGlobalConfigAdminIx(
   globalConfig: GlobalConfig,
   programAddress: Address,
 ): Instruction {
-  let accounts: Instructions.UpdateGlobalConfigAdminAccounts = {
-    // TODO do we really need a cached admin authority? If yes, we need to cache the keypair not just the address
-    //adminAuthorityCached: createNoopSigner(globalConfig.adminAuthorityCached),
-    adminAuthorityCached: admin,
-    globalConfig: globalConfigAddress,
-  };
-
-  let ix = Instructions.updateGlobalConfigAdmin(accounts, [], programAddress);
-
-  return ix;
+  return getUpdateGlobalConfigAdminInstruction(
+    {
+      // TODO do we really need a cached admin authority? If yes, we need to cache the keypair not just the address
+      //adminAuthorityCached: createNoopSigner(globalConfig.adminAuthorityCached),
+      adminAuthorityCached: admin,
+      globalConfig: globalConfigAddress,
+    },
+    { programAddress },
+  );
 }
 
 function encodedUpdateOrderValue(
@@ -506,6 +458,8 @@ function encodedUpdateOrderValue(
       valueData = Buffer.alloc(32);
       valuePublicKey.copy(valueData, 0);
       break;
+    default:
+      throw new Error(`Unsupported update order mode: ${mode.kind}`);
   }
 
   const uint8Array = new Uint8Array(valueData);
@@ -515,7 +469,7 @@ function encodedUpdateOrderValue(
 function encodedUpdateGlobalConfigValue(
   mode: UpdateGlobalConfigModeKind,
   value: number | Address,
-): Array<number> {
+): Uint8Array {
   const valueData = Buffer.alloc(128);
   let valueNumber: number;
   let valueAddress: Buffer;
@@ -545,6 +499,5 @@ function encodedUpdateGlobalConfigValue(
       break;
   }
 
-  const uint8Array = new Uint8Array(valueData);
-  return Array.from(uint8Array);
+  return new Uint8Array(valueData);
 }

@@ -4,7 +4,6 @@ import {
   createMint,
   endpointFromCluster,
   getAssociatedTokenAddress,
-  getLimoProgramId,
   getPdaAuthority,
   getTokenVaultPDA,
   GlobalAccounts,
@@ -17,6 +16,7 @@ import {
   TokenInfo,
   UserAccounts,
 } from "./utils";
+import { getLimoProgramId } from "./programId";
 import Decimal from "decimal.js";
 import { LimoClient, WRAPPED_SOL_MINT } from "../Limo";
 import { generateKeyPairSigner } from "@solana/signers";

@@ -34,7 +34,8 @@ export async function initializeClient(
   if (admin) {
     resolvedAdmin = admin;
   } else {
-    console.log("Running without an admin keypair!");
+    // Normal for read-only commands; stderr keeps piped stdout clean.
+    console.error("No admin keypair configured; signing commands will fail.");
     resolvedAdmin = "";
   }
 
@@ -44,6 +45,15 @@ export async function initializeClient(
     clusterOverride: cluster,
     programOverride: programAddress,
   });
+
+  // Always print the resolved target so prod-vs-staging is obvious before any tx.
+  // Goes to stderr so piped/scripted stdout (e.g. order lists) stays clean.
+  // Note: LIMO_GLOBAL_CONFIG is the env value; some commands may override it via CLI flags.
+  console.error(
+    yellow(
+      `🎯 program=${env.programAddress.toString()} LIMO_GLOBAL_CONFIG=${process.env.LIMO_GLOBAL_CONFIG ?? "<unset>"}`,
+    ),
+  );
 
   !multisig && debug && console.log("\nSettings ⚙️");
   !multisig &&

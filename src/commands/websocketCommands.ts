@@ -1,4 +1,4 @@
-import { Order } from "../rpc_client/accounts";
+import { Order } from "../rpc_client/generated/accounts";
 import { initializeClient } from "./utils";
 import {
   FilledOrderQueue,
@@ -78,7 +78,7 @@ export async function listenToOrderFillChangesForQuoteAndBase(
       orderDisplay: order,
       quoteTokenMint: quote,
       baseTokenMint: base,
-      time: order.state.lastUpdatedTimestamp.toNumber(),
+      time: Number(order.state.lastUpdatedTimestamp),
       price: order.executionPriceInputToOutput,
       size: order.filledOutputAmountDecimal,
       txid: "N/A",
@@ -101,7 +101,7 @@ export async function listenToOrderFillChangesForQuoteAndBase(
       orderDisplay: order,
       quoteTokenMint: quote,
       baseTokenMint: base,
-      time: orderStateAndAddress.state.lastUpdatedTimestamp.toNumber(),
+      time: Number(orderStateAndAddress.state.lastUpdatedTimestamp),
       price: order.executionPriceOutputToInput,
       size: order.filledOutputAmountDecimal,
       txid: "N/A",

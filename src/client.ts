@@ -22,7 +22,10 @@ import {
 } from "./commands/initCommands";
 import dotenv from "dotenv";
 import {
+  closeAllOrders,
+  closeOrder,
   getAllOrders,
+  listOpenOrders,
   listOrders,
   listOrdersForUser,
   permissionlessTakeOrder,
@@ -88,7 +91,7 @@ async function main() {
     .command("update-global-config")
     .requiredOption(
       "--update-mode <string>",
-      "string value of the update mode, found in rpc_client/types/UpdateGlobalConfigMode.ts",
+      "string value of the update mode, found in utils/programModes.ts",
     )
     .requiredOption("--value <string>")
     .requiredOption(
@@ -115,10 +118,14 @@ async function main() {
 
   commands
     .command("place-bid")
-    .option("--quote <string>")
-    .option("--base <string>")
-    .option("--price <string>")
-    .option("--base-amount <string>")
+    .description("Place a bid (buy base with quote)")
+    .option(
+      "--quote <string>",
+      "Quote token mint (defaults to QUOTE_TOKEN env)",
+    )
+    .option("--base <string>", "Base token mint (defaults to BASE_TOKEN env)")
+    .requiredOption("--price <string>", "Price as a decimal number")
+    .requiredOption("--base-amount <string>", "Base amount as a decimal number")
     .action(async ({ quote, base, price, baseAmount }) => {
       await placeOrder(
         quote,
@@ -131,10 +138,17 @@ async function main() {
 
   commands
     .command("place-ask")
-    .option("--quote <string>")
-    .option("--base <string>")
-    .option("--price <string>")
-    .option("--quote-amount <string>")
+    .description("Place an ask (sell base for quote)")
+    .option(
+      "--quote <string>",
+      "Quote token mint (defaults to QUOTE_TOKEN env)",
+    )
+    .option("--base <string>", "Base token mint (defaults to BASE_TOKEN env)")
+    .requiredOption("--price <string>", "Price as a decimal number")
+    .requiredOption(
+      "--quote-amount <string>",
+      "Quote amount as a decimal number",
+    )
     .action(async ({ quote, base, price, quoteAmount }) => {
       await placeOrder(
         quote,
@@ -143,6 +157,28 @@ async function main() {
         parseFloat(price),
         "ask",
       );
+    });
+
+  commands
+    .command("close-order")
+    .requiredOption("--order <string>", "Order address to close")
+    .requiredOption(
+      "--mode <string>",
+      "multisig - will print bs58 txn only, simulate - will print bs64 txn explorer link and simulation, execute - to execute txn",
+    )
+    .action(async ({ order, mode }) => {
+      await closeOrder(address(order), mode);
+    });
+
+  commands
+    .command("close-all-orders")
+    .description("Close every order owned by the ADMIN keypair")
+    .requiredOption(
+      "--mode <string>",
+      "multisig - will print bs58 txn only, simulate - will print bs64 txn explorer link and simulation, execute - to execute txn",
+    )
+    .action(async ({ mode }) => {
+      await closeAllOrders(mode);
     });
 
   commands
@@ -229,6 +265,16 @@ async function main() {
   commands.command("get-all-orders").action(async ({}) => {
     await getAllOrders();
   });
+
+  commands
+    .command("list-open-orders")
+    .description(
+      "List all active orders not fully filled, with unfilled USD value",
+    )
+    .option("--csv <path>", "Also write the orders to a CSV file")
+    .action(async ({ csv }) => {
+      await listOpenOrders(csv);
+    });
 
   commands.command("create-mint").action(async () => {
     const admin = process.env.ADMIN;
@@ -337,7 +383,7 @@ async function main() {
     .requiredOption("--order <string>", "Order address")
     .requiredOption(
       "--update-mode <string>",
-      "string value of the update mode, found in rpc_client/types/UpdateOrderMode.ts",
+      "string value of the update mode, found in utils/programModes.ts",
     )
     .requiredOption(
       "--mode <string>",

@@ -1,7 +1,7 @@
 import { initializeClient } from "./utils";
 import { getLimoProgramId } from "../utils";
 import { LimoClient } from "../Limo";
-import { UpdateGlobalConfigMode, UpdateOrderMode } from "../rpc_client/types";
+import { UpdateGlobalConfigMode, UpdateOrderMode } from "../utils/programModes";
 import { Address, address } from "@solana/kit";
 
 export async function updateGlobalConfig(

@@ -1,4 +1,4 @@
-import { Order } from "../rpc_client/accounts/Order";
+import { Order } from "../rpc_client/generated/accounts";
 import Decimal from "decimal.js";
 import {
   Address,
