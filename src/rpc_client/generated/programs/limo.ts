@@ -107,8 +107,6 @@ import {
   type WithdrawHostTipInput,
 } from "../instructions";
 import {
-  findConfigRouterPda,
-  findExpressRelayMetadataPda,
   findInputVaultPda,
   findIntermediaryOutputTokenAccountPda,
   findPdaAuthorityPda,
@@ -609,8 +607,6 @@ export type LimoPluginPdas = {
   userSwapBalanceState: typeof findUserSwapBalanceStatePda;
   inputVault: typeof findInputVaultPda;
   intermediaryOutputTokenAccount: typeof findIntermediaryOutputTokenAccountPda;
-  expressRelayMetadata: typeof findExpressRelayMetadataPda;
-  configRouter: typeof findConfigRouterPda;
   pdaAuthority: typeof findPdaAuthorityPda;
   vault: typeof findVaultPda;
 };
@@ -720,8 +716,6 @@ export function limoProgram() {
           userSwapBalanceState: findUserSwapBalanceStatePda,
           inputVault: findInputVaultPda,
           intermediaryOutputTokenAccount: findIntermediaryOutputTokenAccountPda,
-          expressRelayMetadata: findExpressRelayMetadataPda,
-          configRouter: findConfigRouterPda,
           pdaAuthority: findPdaAuthorityPda,
           vault: findVaultPda,
         },

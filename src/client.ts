@@ -32,6 +32,7 @@ import {
   placeOrder,
 } from "./commands/orderCommands";
 import {
+  getGlobalConfig,
   updateGlobalConfig,
   updateGlobalConfigAdmin,
   updateOrder,
@@ -114,6 +115,17 @@ async function main() {
     )
     .action(async ({ globalConfig, mode }) => {
       await updateGlobalConfigAdmin(globalConfig, mode);
+    });
+
+  commands
+    .command("get-global-config")
+    .description("Fetch and print the decoded global config")
+    .option(
+      "--global-config <string>",
+      "global config pubkey - if not provided will use the global config from the env",
+    )
+    .action(async ({ globalConfig }) => {
+      await getGlobalConfig(globalConfig);
     });
 
   commands

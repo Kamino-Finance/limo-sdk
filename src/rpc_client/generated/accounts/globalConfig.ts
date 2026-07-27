@@ -60,6 +60,12 @@ export type GlobalConfig = {
   newOrdersBlocked: number;
   ordersTakingBlocked: number;
   hostFeeBps: number;
+  /**
+   * Bitmask of disabled RFQ venues. `0` (default) means every venue is
+   * enabled. Bit 0 (`RFQ_VENUE_KRFQ_DISABLED`) disables krfq, bit 1
+   * (`RFQ_VENUE_PER_DISABLED`) disables Express Relay (PER).
+   */
+  rfqVenuesBlocked: number;
   padding0: ReadonlyUint8Array;
   /** The number of seconds after an order has been updated before it can be closed */
   orderCloseDelaySeconds: bigint;
@@ -95,6 +101,12 @@ export type GlobalConfigArgs = {
   newOrdersBlocked: number;
   ordersTakingBlocked: number;
   hostFeeBps: number;
+  /**
+   * Bitmask of disabled RFQ venues. `0` (default) means every venue is
+   * enabled. Bit 0 (`RFQ_VENUE_KRFQ_DISABLED`) disables krfq, bit 1
+   * (`RFQ_VENUE_PER_DISABLED`) disables Express Relay (PER).
+   */
+  rfqVenuesBlocked: number;
   padding0: ReadonlyUint8Array;
   /** The number of seconds after an order has been updated before it can be closed */
   orderCloseDelaySeconds: number | bigint;
@@ -134,7 +146,8 @@ export function getGlobalConfigEncoder(): FixedSizeEncoder<GlobalConfigArgs> {
       ["newOrdersBlocked", getU8Encoder()],
       ["ordersTakingBlocked", getU8Encoder()],
       ["hostFeeBps", getU16Encoder()],
-      ["padding0", fixEncoderSize(getBytesEncoder(), 2)],
+      ["rfqVenuesBlocked", getU8Encoder()],
+      ["padding0", fixEncoderSize(getBytesEncoder(), 1)],
       ["orderCloseDelaySeconds", getU64Encoder()],
       ["padding1", getArrayEncoder(getU64Encoder(), { size: 9 })],
       ["pdaAuthorityPreviousLamportsBalance", getU64Encoder()],
@@ -161,7 +174,8 @@ export function getGlobalConfigDecoder(): FixedSizeDecoder<GlobalConfig> {
     ["newOrdersBlocked", getU8Decoder()],
     ["ordersTakingBlocked", getU8Decoder()],
     ["hostFeeBps", getU16Decoder()],
-    ["padding0", fixDecoderSize(getBytesDecoder(), 2)],
+    ["rfqVenuesBlocked", getU8Decoder()],
+    ["padding0", fixDecoderSize(getBytesDecoder(), 1)],
     ["orderCloseDelaySeconds", getU64Decoder()],
     ["padding1", getArrayDecoder(getU64Decoder(), { size: 9 })],
     ["pdaAuthorityPreviousLamportsBalance", getU64Decoder()],

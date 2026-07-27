@@ -73,6 +73,7 @@ export type SendableSignedTransaction = Parameters<
 const ESCROW_VAULT_SEED = "escrow_vault";
 const GLOBAL_AUTH_SEED = "authority";
 const EXPRESS_RELAY_MEATADATA_SEED = "metadata";
+const KRFQ_METADATA_SEED = "metadata";
 const EXPRESS_RELAY_CONFIG_ROUTER_SEED = "config_router";
 const INTERMEDIARY_OUTPUT_TOKEN_ACCOUNT_SEED = "intermediary";
 const EVENT_AUTHORITY_SEED = "__event_authority";
@@ -732,6 +733,25 @@ export async function getExpressRelayMetadataPDA(
     seeds: [EXPRESS_RELAY_MEATADATA_SEED],
   });
 
+  return metadata;
+}
+
+// Deployed KRFQ program id (mainnet); matches krfq_sdk::PROGRAM_ID and the
+// generated flash_take_order builder default.
+// TODO: once `@kamino-finance/krfq-sdk` is published publicly, source this (and
+// getKrfqMetadataPDA below) from it (PROGRAM_ID / findMetadataAddress) instead of
+// hand-rolling. It can't be a dependency while private — limo-sdk is public and
+// the public mirror would fail to resolve a private dep.
+export const KRFQ_PROGRAM_ID = address(
+  "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL",
+);
+
+// KRFQ ProgramMetadata PDA: seeds `[b"metadata"]` (krfq_sdk::cpi::find_metadata_address).
+export async function getKrfqMetadataPDA(): Promise<Address> {
+  const [metadata] = await getProgramDerivedAddress({
+    programAddress: KRFQ_PROGRAM_ID,
+    seeds: [KRFQ_METADATA_SEED],
+  });
   return metadata;
 }
 

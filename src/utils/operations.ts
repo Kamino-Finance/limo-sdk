@@ -16,8 +16,10 @@ import {
   getEventAuthorityPDA,
   getExpressRelayConfigRouterPDA,
   getExpressRelayMetadataPDA,
+  getKrfqMetadataPDA,
   getPdaAuthority,
   getTokenVaultPDA,
+  KRFQ_PROGRAM_ID,
 } from "./utils";
 import {
   UpdateGlobalConfigMode,
@@ -43,6 +45,12 @@ import BN from "bn.js";
 function big(value: BN): bigint {
   return BigInt(value.toString());
 }
+
+// None-sentinel convention for optional accounts: the handler reads an optional
+// account set to the limo program's own address (`params.programAddress`) as
+// `None`, and treats any present krfq account as a krfq-route attempt. The Codama
+// builder auto-fills a real default for `krfqProgram`/`expressRelay`, so passing
+// `programAddress` is how we send `None`. See take_order.rs / flash_take_order.rs.
 
 export interface OrderParams {
   quoteTokenMint: Address;
@@ -238,6 +246,9 @@ export async function takeOrder(params: {
         params.expressRelayProgramId,
         pdaAuthority,
       ),
+      // PER / permissionless path: krfqProgram → None sentinel (see convention
+      // above); krfqMetadata left unset.
+      krfqProgram: params.programAddress,
       sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
       takerInputAta: params.takerInputAta,
       intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
@@ -252,6 +263,68 @@ export async function takeOrder(params: {
       inputAmount: big(params.inputAmountLamports),
       minOutputAmount: big(params.minOutputAmountLamports),
       tipAmountPermissionlessTaking: big(params.permissionlessTipLamports),
+    },
+    { programAddress: params.programAddress },
+  );
+}
+
+export async function takeOrderKrfq(params: {
+  taker: TransactionSigner;
+  maker: Address;
+  globalConfig: Address;
+  inputMint: Address;
+  outputMint: Address;
+  order: Address;
+  inputAmountLamports: BN;
+  minOutputAmountLamports: BN;
+  programAddress: Address;
+  takerInputAta: Address;
+  takerOutputAta: Address;
+  intermediaryOutputTokenAccount?: Address;
+  makerOutputAta?: Address;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
+}): Promise<Instruction> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
+  let inputVault = await getTokenVaultPDA(
+    params.programAddress,
+    params.globalConfig,
+    params.inputMint,
+  );
+
+  return getTakeOrderInstruction(
+    {
+      taker: params.taker,
+      maker: params.maker,
+      globalConfig: params.globalConfig,
+      pdaAuthority,
+      order: params.order,
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      inputVault,
+      // KRFQ path: PER off — expressRelay → None sentinel (see convention
+      // above); permission left unset.
+      expressRelay: params.programAddress,
+      sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
+      takerInputAta: params.takerInputAta,
+      intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
+      takerOutputAta: params.takerOutputAta,
+      makerOutputAta: params.makerOutputAta,
+      // KrfqOnly: both krfq accounts present; handler CPIs check_permission.
+      krfqProgram: KRFQ_PROGRAM_ID,
+      krfqMetadata: await getKrfqMetadataPDA(),
+      inputTokenProgram: params.inputTokenProgram,
+      outputTokenProgram: params.outputTokenProgram,
+      systemProgram: SYSTEM_PROGRAM_ADDRESS,
+      rent: SYSVAR_RENT_ADDRESS,
+      eventAuthority: await getEventAuthorityPDA(params.programAddress),
+      program: params.programAddress,
+      inputAmount: big(params.inputAmountLamports),
+      minOutputAmount: big(params.minOutputAmountLamports),
+      tipAmountPermissionlessTaking: 0n,
     },
     { programAddress: params.programAddress },
   );
@@ -311,6 +384,9 @@ export async function flashTakeOrder(params: {
     takerOutputAta: params.takerOutputAta,
     intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
     makerOutputAta: params.makerOutputAta,
+    // PER / permissionless path: krfqProgram → None sentinel (see convention
+    // above); krfqMetadata left unset.
+    krfqProgram: params.programAddress,
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
     systemProgram: SYSTEM_PROGRAM_ADDRESS,
@@ -325,6 +401,83 @@ export async function flashTakeOrder(params: {
     tipAmountPermissionlessTaking: big(
       params.permissionlessTipLamports ?? new BN(0),
     ),
+  };
+
+  let startIx = getFlashTakeOrderStartInstruction(
+    { ...commonAccounts, ...args },
+    { programAddress: params.programAddress },
+  );
+
+  let endIx = getFlashTakeOrderEndInstruction(
+    { ...commonAccounts, ...args },
+    { programAddress: params.programAddress },
+  );
+
+  return {
+    startIx,
+    endIx,
+  };
+}
+
+export async function flashTakeOrderKrfq(params: {
+  taker: TransactionSigner;
+  maker: Address;
+  globalConfig: Address;
+  inputMint: Address;
+  outputMint: Address;
+  order: Address;
+  inputAmountLamports: BN;
+  minOutputAmountLamports: BN;
+  programAddress: Address;
+  takerInputAta: Address;
+  takerOutputAta: Address;
+  intermediaryOutputTokenAccount: Address | undefined;
+  makerOutputAta: Address | undefined;
+  inputTokenProgram: Address;
+  outputTokenProgram: Address;
+}): Promise<{ startIx: Instruction; endIx: Instruction }> {
+  let pdaAuthority = await getPdaAuthority(
+    params.programAddress,
+    params.globalConfig,
+  );
+  let inputVault = await getTokenVaultPDA(
+    params.programAddress,
+    params.globalConfig,
+    params.inputMint,
+  );
+
+  // KRFQ path: PER off — expressRelay → None sentinel (see convention above);
+  // permission left unset.
+  let commonAccounts = {
+    taker: params.taker,
+    maker: params.maker,
+    globalConfig: params.globalConfig,
+    pdaAuthority,
+    order: params.order,
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    inputVault,
+    sysvarInstructions: SYSVAR_INSTRUCTIONS_ADDRESS,
+    takerInputAta: params.takerInputAta,
+    takerOutputAta: params.takerOutputAta,
+    intermediaryOutputTokenAccount: params.intermediaryOutputTokenAccount,
+    makerOutputAta: params.makerOutputAta,
+    expressRelay: params.programAddress,
+    // KrfqOnly: both krfq accounts present; handler CPIs check_permission.
+    krfqProgram: KRFQ_PROGRAM_ID,
+    krfqMetadata: await getKrfqMetadataPDA(),
+    inputTokenProgram: params.inputTokenProgram,
+    outputTokenProgram: params.outputTokenProgram,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    rent: SYSVAR_RENT_ADDRESS,
+    eventAuthority: await getEventAuthorityPDA(params.programAddress),
+    program: params.programAddress,
+  };
+
+  let args = {
+    inputAmount: big(params.inputAmountLamports),
+    minOutputAmount: big(params.minOutputAmountLamports),
+    tipAmountPermissionlessTaking: 0n,
   };
 
   let startIx = getFlashTakeOrderStartInstruction(
@@ -479,6 +632,7 @@ function encodedUpdateGlobalConfigValue(
     case UpdateGlobalConfigMode.UpdateBlockNewOrders.discriminator:
     case UpdateGlobalConfigMode.UpdateBlockOrderTaking.discriminator:
     case UpdateGlobalConfigMode.UpdateOrderTakingPermissionless.discriminator:
+    case UpdateGlobalConfigMode.UpdateRfqVenuesBlocked.discriminator:
       valueNumber = value as number;
       valueData.writeUIntLE(valueNumber, 0, 1);
       break;

@@ -4,6 +4,48 @@ import { LimoClient } from "../Limo";
 import { UpdateGlobalConfigMode, UpdateOrderMode } from "../utils/programModes";
 import { Address, address } from "@solana/kit";
 
+const RFQ_VENUE_LABELS = (blocked: number): string => {
+  if (blocked === 0) return "all venues enabled";
+  const off: string[] = [];
+  if (blocked & 1) off.push("krfq");
+  if (blocked & 2) off.push("per");
+  return `disabled: ${off.join(", ")}`;
+};
+
+export async function getGlobalConfig(globalConfigString: string | undefined) {
+  const rpc = process.env.RPC_ENV;
+  const admin = process.env.ADMIN;
+  const globalConfig = globalConfigString
+    ? globalConfigString
+    : process.env.LIMO_GLOBAL_CONFIG;
+  const env = await initializeClient(rpc!, admin!, getLimoProgramId(), false);
+  const client = new LimoClient(env.rpc, env.rpcWs, address(globalConfig!));
+
+  const c = await client.getGlobalConfigState();
+
+  console.log(`Global Config: ${globalConfig}`);
+  console.log(`  emergencyMode             : ${c.emergencyMode}`);
+  console.log(`  flashTakeOrderBlocked     : ${c.flashTakeOrderBlocked}`);
+  console.log(`  newOrdersBlocked          : ${c.newOrdersBlocked}`);
+  console.log(`  ordersTakingBlocked       : ${c.ordersTakingBlocked}`);
+  console.log(`  hostFeeBps                : ${c.hostFeeBps}`);
+  console.log(
+    `  rfqVenuesBlocked          : ${c.rfqVenuesBlocked} (${RFQ_VENUE_LABELS(c.rfqVenuesBlocked)})`,
+  );
+  console.log(`  orderCloseDelaySeconds    : ${c.orderCloseDelaySeconds}`);
+  console.log(`  txnFeeCost                : ${c.txnFeeCost}`);
+  console.log(`  ataCreationCost           : ${c.ataCreationCost}`);
+  console.log(`  pdaAuthority              : ${c.pdaAuthority}`);
+  console.log(`  pdaAuthorityBump          : ${c.pdaAuthorityBump}`);
+  console.log(`  adminAuthority            : ${c.adminAuthority}`);
+  console.log(`  adminAuthorityCached      : ${c.adminAuthorityCached}`);
+  console.log(`  totalTipAmount            : ${c.totalTipAmount}`);
+  console.log(`  hostTipAmount             : ${c.hostTipAmount}`);
+  console.log(
+    `  pdaAuthorityPrevLamports  : ${c.pdaAuthorityPreviousLamportsBalance}`,
+  );
+}
+
 export async function updateGlobalConfig(
   updateMode: string,
   value: string,
@@ -29,6 +71,7 @@ export async function updateGlobalConfig(
     case UpdateGlobalConfigMode.UpdateOrderCloseDelaySeconds.discriminator:
     case UpdateGlobalConfigMode.UpdateTxnFeeCost.discriminator:
     case UpdateGlobalConfigMode.UpdateAtaCreationCost.discriminator:
+    case UpdateGlobalConfigMode.UpdateRfqVenuesBlocked.discriminator:
       valueCasted = Number(value);
       break;
     case UpdateGlobalConfigMode.UpdateAdminAuthorityCached.discriminator:

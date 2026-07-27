@@ -50,8 +50,8 @@ export const LIMO_ERROR__INVALID_HOST_TIP_BALANCE = 0x177f; // 6015
 export const LIMO_ERROR__ORDER_WITHIN_FLASH_OPERATION = 0x1780; // 6016
 /** CPINotAllowed: CPI not allowed */
 export const LIMO_ERROR__C_P_I_NOT_ALLOWED = 0x1781; // 6017
-/** FlashTakeOrderBlocked: Flash take_order is blocked */
-export const LIMO_ERROR__FLASH_TAKE_ORDER_BLOCKED = 0x1782; // 6018
+/** TakeOrderBlocked: take_order is blocked */
+export const LIMO_ERROR__TAKE_ORDER_BLOCKED = 0x1782; // 6018
 /** FlashTxWithUnexpectedIxs: Some unexpected instructions are present in the tx. Either before or after the flash ixs, or some ix target the same program between */
 export const LIMO_ERROR__FLASH_TX_WITH_UNEXPECTED_IXS = 0x1783; // 6019
 /** FlashIxsNotEnded: Flash ixs initiated without the closing ix in the transaction */
@@ -116,6 +116,8 @@ export const LIMO_ERROR__SWAP_OUTPUT_AMOUNT_TOO_SMALL = 0x17a0; // 6048
 export const LIMO_ERROR__SWAP_INPUT_INVALID_BALANCE_CHANGE = 0x17a1; // 6049
 /** SwapOutputInvalidBalanceChange: The swap output balance change is negative, expected positive */
 export const LIMO_ERROR__SWAP_OUTPUT_INVALID_BALANCE_CHANGE = 0x17a2; // 6050
+/** RfqVenueDisabled: The RFQ venue used to fill this order is disabled in the global config */
+export const LIMO_ERROR__RFQ_VENUE_DISABLED = 0x17a3; // 6051
 
 export type LimoError =
   | typeof LIMO_ERROR__COUNTERPARTY_DISALLOWED
@@ -126,7 +128,6 @@ export type LimoError =
   | typeof LIMO_ERROR__FLASH_IXS_ARGS_MISMATCH
   | typeof LIMO_ERROR__FLASH_IXS_NOT_ENDED
   | typeof LIMO_ERROR__FLASH_IXS_NOT_STARTED
-  | typeof LIMO_ERROR__FLASH_TAKE_ORDER_BLOCKED
   | typeof LIMO_ERROR__FLASH_TX_WITH_UNEXPECTED_IXS
   | typeof LIMO_ERROR__INTEGER_OVERFLOW
   | typeof LIMO_ERROR__INTERMEDIARY_OUTPUT_TOKEN_ACCOUNT_REQUIRED
@@ -163,10 +164,12 @@ export type LimoError =
   | typeof LIMO_ERROR__OUT_OF_RANGE_INTEGRAL_CONVERSION
   | typeof LIMO_ERROR__PERMISSION_DOES_NOT_MATCH_ORDER
   | typeof LIMO_ERROR__PERMISSION_REQUIRED_PERMISSIONLESS_NOT_ENABLED
+  | typeof LIMO_ERROR__RFQ_VENUE_DISABLED
   | typeof LIMO_ERROR__SWAP_INPUT_AMOUNT_TOO_LARGE
   | typeof LIMO_ERROR__SWAP_INPUT_INVALID_BALANCE_CHANGE
   | typeof LIMO_ERROR__SWAP_OUTPUT_AMOUNT_TOO_SMALL
   | typeof LIMO_ERROR__SWAP_OUTPUT_INVALID_BALANCE_CHANGE
+  | typeof LIMO_ERROR__TAKE_ORDER_BLOCKED
   | typeof LIMO_ERROR__UNINITIALIZED_TOKEN_ACCOUNT
   | typeof LIMO_ERROR__UNSUPPORTED_TOKEN_EXTENSION;
 
@@ -181,7 +184,6 @@ if (process.env["NODE_ENV"] !== "production") {
     [LIMO_ERROR__FLASH_IXS_ARGS_MISMATCH]: `Some args differ between the two flash ixs`,
     [LIMO_ERROR__FLASH_IXS_NOT_ENDED]: `Flash ixs initiated without the closing ix in the transaction`,
     [LIMO_ERROR__FLASH_IXS_NOT_STARTED]: `Flash ixs ended without the starting ix in the transaction`,
-    [LIMO_ERROR__FLASH_TAKE_ORDER_BLOCKED]: `Flash take_order is blocked`,
     [LIMO_ERROR__FLASH_TX_WITH_UNEXPECTED_IXS]: `Some unexpected instructions are present in the tx. Either before or after the flash ixs, or some ix target the same program between`,
     [LIMO_ERROR__INTEGER_OVERFLOW]: `Conversion between integers failed`,
     [LIMO_ERROR__INTERMEDIARY_OUTPUT_TOKEN_ACCOUNT_REQUIRED]: `Intermediary output token account required when output mint is WSOL`,
@@ -218,10 +220,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [LIMO_ERROR__OUT_OF_RANGE_INTEGRAL_CONVERSION]: `Out of range integral conversion attempted`,
     [LIMO_ERROR__PERMISSION_DOES_NOT_MATCH_ORDER]: `Permission address does not match order address`,
     [LIMO_ERROR__PERMISSION_REQUIRED_PERMISSIONLESS_NOT_ENABLED]: `Permissionless order taking not enabled, please provide permission account`,
+    [LIMO_ERROR__RFQ_VENUE_DISABLED]: `The RFQ venue used to fill this order is disabled in the global config`,
     [LIMO_ERROR__SWAP_INPUT_AMOUNT_TOO_LARGE]: `The swap input amount is larger than the maximum allowed`,
     [LIMO_ERROR__SWAP_INPUT_INVALID_BALANCE_CHANGE]: `The swap input balance change is positive, expected negative`,
     [LIMO_ERROR__SWAP_OUTPUT_AMOUNT_TOO_SMALL]: `The swap output amount is smaller than the minimum allowed`,
     [LIMO_ERROR__SWAP_OUTPUT_INVALID_BALANCE_CHANGE]: `The swap output balance change is negative, expected positive`,
+    [LIMO_ERROR__TAKE_ORDER_BLOCKED]: `take_order is blocked`,
     [LIMO_ERROR__UNINITIALIZED_TOKEN_ACCOUNT]: `Token account is not initialized`,
     [LIMO_ERROR__UNSUPPORTED_TOKEN_EXTENSION]: `Mint has a token (2022) extension that is not supported`,
   };

@@ -6,8 +6,6 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./configRouter";
-export * from "./expressRelayMetadata";
 export * from "./inputVault";
 export * from "./intermediaryOutputTokenAccount";
 export * from "./pdaAuthority";

@@ -1,6 +1,5 @@
 import {
   amountToLamportsBN,
-  asOption,
   AssertUserSwapBalancesIxArgs,
   checkIfAccountExists,
   createAddExtraComputeUnitFeeTransaction,
@@ -1803,6 +1802,133 @@ export class LimoClient {
   }
 
   /**
+   * Take an order using the KRFQ path (no Express Relay dependency, tip = 0).
+   * The caller must place a matching krfq `submit_bid` (permission_key = order
+   * address) earlier in the same transaction; the program CPIs check_permission.
+   * @param taker - the taker signer
+   * @param order - the order state and address
+   * @param inputAmountLamports - the input amount in lamports
+   * @param minOutputAmountLamports - the minimum output amount in lamports
+   * @param wrapUnwrapSol - whether to wrap/unwrap SOL
+   * @returns the take order KRFQ instructions (create atas, take, close wsol)
+   */
+  async takeOrderIxKrfq(
+    taker: TransactionSigner,
+    order: OrderStateAndAddress,
+    inputAmountLamports: BN,
+    minOutputAmountLamports: BN,
+    wrapUnwrapSol: boolean = true,
+  ): Promise<Instruction[]> {
+    let ixs: Instruction[] = [];
+    let closeWsolAtaIxs: Instruction[] = [];
+
+    let takerInputAta: Address;
+    if (order.state.inputMint === WRAPPED_SOL_MINT) {
+      const {
+        createIxs,
+        fillIxs: _fill,
+        closeIx,
+        ata,
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        taker,
+        taker,
+        new BN(0),
+      );
+      takerInputAta = ata;
+      if (wrapUnwrapSol) {
+        ixs.push(...createIxs);
+        closeWsolAtaIxs.push(...closeIx);
+      }
+    } else {
+      const { ata, createAtaIx: createTakerInputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.inputMint,
+          order.state.inputMintProgramId,
+        );
+      takerInputAta = ata;
+      ixs.push(createTakerInputAta);
+    }
+
+    let takerOutputAta: Address;
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      const outputExpectedOutForInputAmount = divCeil(
+        new BN(order.state.expectedOutputAmount.toString()).mul(
+          inputAmountLamports,
+        ),
+        new BN(order.state.initialInputAmount.toString()),
+      );
+
+      const { createIxs, fillIxs, closeIx, ata } =
+        await this.getInitIfNeededWSOLCreateAndCloseIxs(
+          taker,
+          taker,
+          outputExpectedOutForInputAmount,
+        );
+      takerOutputAta = ata;
+      if (wrapUnwrapSol) {
+        ixs.push(...createIxs, ...fillIxs);
+        closeWsolAtaIxs.push(...closeIx);
+      }
+    } else {
+      const { ata, createAtaIx: createTakerOutputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.outputMint,
+          order.state.outputMintProgramId,
+        );
+      takerOutputAta = ata;
+      ixs.push(createTakerOutputAta);
+    }
+
+    let makerOutputAta: Address | undefined;
+    let intermediaryOutputTokenAccount: Address | undefined;
+
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      makerOutputAta = undefined;
+      intermediaryOutputTokenAccount = await getIntermediaryTokenAccountPDA(
+        this.programAddress,
+        order.address,
+      );
+    } else {
+      const { ata, createAtaIx } = await createAtaIdempotent(
+        order.state.maker,
+        taker,
+        order.state.outputMint,
+        order.state.outputMintProgramId,
+      );
+      makerOutputAta = ata;
+      ixs.push(createAtaIx);
+      intermediaryOutputTokenAccount = undefined;
+    }
+
+    ixs.push(
+      await limoOperations.takeOrderKrfq({
+        taker,
+        maker: order.state.maker,
+        globalConfig: order.state.globalConfig,
+        inputMint: order.state.inputMint,
+        outputMint: order.state.outputMint,
+        order: order.address,
+        inputAmountLamports,
+        minOutputAmountLamports,
+        programAddress: this.programAddress,
+        takerInputAta,
+        takerOutputAta,
+        intermediaryOutputTokenAccount,
+        makerOutputAta,
+        inputTokenProgram: order.state.inputMintProgramId,
+        outputTokenProgram: order.state.outputMintProgramId,
+      }),
+    );
+
+    ixs.push(...closeWsolAtaIxs);
+    return ixs;
+  }
+
+  /**
    * Take an order
    * @param crank - the crank keypair
    * @param order - the order state and address
@@ -2010,6 +2136,138 @@ export class LimoClient {
             ? permissionlessTipLamports
             : new BN(0),
         permissionless: permissionless !== undefined ? permissionless : false,
+      });
+
+    return {
+      createAtaIxs,
+      startFlashIx,
+      endFlashIx,
+      closeWsolAtaIxs: closeWsolAtaIxs,
+    };
+  }
+
+  /**
+   * Flash take an order using KRFQ path (no Express Relay dependency)
+   * @param taker - the taker signer
+   * @param order - the order state and address
+   * @param inputAmountLamports - the input amount in lamports
+   * @param minOutputAmountLamports - the minimum output amount in lamports
+   * @param wrapUnwrapSol - whether to wrap/unwrap SOL
+   * @returns the create flash take order KRFQ instructions
+   */
+  async flashTakeOrderIxsKrfq(
+    taker: TransactionSigner,
+    order: OrderStateAndAddress,
+    inputAmountLamports: BN,
+    minOutputAmountLamports: BN,
+    wrapUnwrapSol: boolean = true,
+  ): Promise<FlashTakeOrderIxs> {
+    let createAtaIxs: Instruction[] = [];
+    let closeWsolAtaIxs: Instruction[] = [];
+
+    let takerInputAta: Address;
+    if (order.state.inputMint === WRAPPED_SOL_MINT) {
+      const {
+        createIxs,
+        fillIxs: _fill,
+        closeIx,
+        ata,
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        taker,
+        taker,
+        new BN(0),
+      );
+      takerInputAta = ata;
+      if (wrapUnwrapSol) {
+        createAtaIxs.push(...createIxs);
+        closeWsolAtaIxs.push(...closeIx);
+      }
+    } else {
+      const { ata, createAtaIx: createTakerInputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.inputMint,
+          order.state.inputMintProgramId,
+        );
+      takerInputAta = ata;
+      createAtaIxs.push(createTakerInputAta);
+    }
+
+    let takerOutputAta: Address;
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      const outputExpectedOutForInputAmount = divCeil(
+        new BN(order.state.expectedOutputAmount.toString()).mul(
+          inputAmountLamports,
+        ),
+        new BN(order.state.initialInputAmount.toString()),
+      );
+
+      const {
+        createIxs,
+        fillIxs: _fillIxs,
+        closeIx,
+        ata,
+      } = await this.getInitIfNeededWSOLCreateAndCloseIxs(
+        taker,
+        taker,
+        outputExpectedOutForInputAmount,
+      );
+      takerOutputAta = ata;
+      if (wrapUnwrapSol) {
+        createAtaIxs.push(...createIxs);
+        closeWsolAtaIxs.push(...closeIx);
+      }
+    } else {
+      const { ata, createAtaIx: createTakerOutputAta } =
+        await createAtaIdempotent(
+          taker.address,
+          taker,
+          order.state.outputMint,
+          order.state.outputMintProgramId,
+        );
+      takerOutputAta = ata;
+      createAtaIxs.push(createTakerOutputAta);
+    }
+
+    let makerOutputAta: Address | undefined;
+    let intermediaryOutputTokenAccount: Address | undefined;
+
+    if (order.state.outputMint === WRAPPED_SOL_MINT) {
+      makerOutputAta = undefined;
+      intermediaryOutputTokenAccount = await getIntermediaryTokenAccountPDA(
+        this.programAddress,
+        order.address,
+      );
+    } else {
+      const { ata, createAtaIx } = await createAtaIdempotent(
+        order.state.maker,
+        taker,
+        order.state.outputMint,
+        order.state.outputMintProgramId,
+      );
+      makerOutputAta = ata;
+      createAtaIxs.push(createAtaIx);
+      intermediaryOutputTokenAccount = undefined;
+    }
+
+    const { startIx: startFlashIx, endIx: endFlashIx } =
+      await limoOperations.flashTakeOrderKrfq({
+        taker,
+        maker: order.state.maker,
+        globalConfig: order.state.globalConfig,
+        inputMint: order.state.inputMint,
+        outputMint: order.state.outputMint,
+        order: order.address,
+        inputAmountLamports,
+        minOutputAmountLamports,
+        programAddress: this.programAddress,
+        takerInputAta,
+        takerOutputAta,
+        intermediaryOutputTokenAccount,
+        makerOutputAta,
+        inputTokenProgram: order.state.inputMintProgramId,
+        outputTokenProgram: order.state.outputMintProgramId,
       });
 
     return {

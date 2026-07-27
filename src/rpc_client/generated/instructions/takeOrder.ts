@@ -10,8 +10,10 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
@@ -40,8 +42,6 @@ import {
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import {
-  findConfigRouterPda,
-  findExpressRelayMetadataPda,
   findInputVaultPda,
   findIntermediaryOutputTokenAccountPda,
 } from "../pdas";
@@ -80,6 +80,10 @@ export type TakeOrderInstruction<
     | AccountMeta<string> = "Sysvar1nstructions1111111111111111111111111",
   TAccountPermission extends string | AccountMeta<string> = string,
   TAccountConfigRouter extends string | AccountMeta<string> = string,
+  TAccountKrfqProgram extends
+    | string
+    | AccountMeta<string> = "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL",
+  TAccountKrfqMetadata extends string | AccountMeta<string> = string,
   TAccountInputTokenProgram extends string | AccountMeta<string> = string,
   TAccountOutputTokenProgram extends string | AccountMeta<string> = string,
   TAccountRent extends
@@ -147,6 +151,12 @@ export type TakeOrderInstruction<
       TAccountConfigRouter extends string
         ? ReadonlyAccount<TAccountConfigRouter>
         : TAccountConfigRouter,
+      TAccountKrfqProgram extends string
+        ? ReadonlyAccount<TAccountKrfqProgram>
+        : TAccountKrfqProgram,
+      TAccountKrfqMetadata extends string
+        ? ReadonlyAccount<TAccountKrfqMetadata>
+        : TAccountKrfqMetadata,
       TAccountInputTokenProgram extends string
         ? ReadonlyAccount<TAccountInputTokenProgram>
         : TAccountInputTokenProgram,
@@ -231,6 +241,8 @@ export type TakeOrderAsyncInput<
   TAccountSysvarInstructions extends string = string,
   TAccountPermission extends string = string,
   TAccountConfigRouter extends string = string,
+  TAccountKrfqProgram extends string = string,
+  TAccountKrfqMetadata extends string = string,
   TAccountInputTokenProgram extends string = string,
   TAccountOutputTokenProgram extends string = string,
   TAccountRent extends string = string,
@@ -255,6 +267,9 @@ export type TakeOrderAsyncInput<
   sysvarInstructions?: Address<TAccountSysvarInstructions>;
   permission?: Address<TAccountPermission>;
   configRouter?: Address<TAccountConfigRouter>;
+  /** the krfq-sdk core is anchor-free and the CPI is a raw `invoke`. */
+  krfqProgram?: Address<TAccountKrfqProgram>;
+  krfqMetadata?: Address<TAccountKrfqMetadata>;
   inputTokenProgram: Address<TAccountInputTokenProgram>;
   outputTokenProgram: Address<TAccountOutputTokenProgram>;
   rent?: Address<TAccountRent>;
@@ -284,6 +299,8 @@ export async function getTakeOrderInstructionAsync<
   TAccountSysvarInstructions extends string,
   TAccountPermission extends string,
   TAccountConfigRouter extends string,
+  TAccountKrfqProgram extends string,
+  TAccountKrfqMetadata extends string,
   TAccountInputTokenProgram extends string,
   TAccountOutputTokenProgram extends string,
   TAccountRent extends string,
@@ -310,6 +327,8 @@ export async function getTakeOrderInstructionAsync<
     TAccountSysvarInstructions,
     TAccountPermission,
     TAccountConfigRouter,
+    TAccountKrfqProgram,
+    TAccountKrfqMetadata,
     TAccountInputTokenProgram,
     TAccountOutputTokenProgram,
     TAccountRent,
@@ -338,6 +357,8 @@ export async function getTakeOrderInstructionAsync<
     TAccountSysvarInstructions,
     TAccountPermission,
     TAccountConfigRouter,
+    TAccountKrfqProgram,
+    TAccountKrfqMetadata,
     TAccountInputTokenProgram,
     TAccountOutputTokenProgram,
     TAccountRent,
@@ -377,6 +398,8 @@ export async function getTakeOrderInstructionAsync<
     },
     permission: { value: input.permission ?? null, isWritable: false },
     configRouter: { value: input.configRouter ?? null, isWritable: false },
+    krfqProgram: { value: input.krfqProgram ?? null, isWritable: false },
+    krfqMetadata: { value: input.krfqMetadata ?? null, isWritable: false },
     inputTokenProgram: {
       value: input.inputTokenProgram ?? null,
       isWritable: false,
@@ -425,18 +448,52 @@ export async function getTakeOrderInstructionAsync<
       "PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou" as Address<"PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou">;
   }
   if (!accounts.expressRelayMetadata.value) {
-    accounts.expressRelayMetadata.value = await findExpressRelayMetadataPda();
+    accounts.expressRelayMetadata.value = await getProgramDerivedAddress({
+      programAddress:
+        "PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou" as Address<"PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou">,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([109, 101, 116, 97, 100, 97, 116, 97]),
+        ),
+      ],
+    });
   }
   if (!accounts.sysvarInstructions.value) {
     accounts.sysvarInstructions.value =
       "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
   }
   if (!accounts.configRouter.value) {
-    accounts.configRouter.value = await findConfigRouterPda({
-      pdaAuthority: getAddressFromResolvedInstructionAccount(
-        "pdaAuthority",
-        accounts.pdaAuthority.value,
-      ),
+    accounts.configRouter.value = await getProgramDerivedAddress({
+      programAddress:
+        "PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou" as Address<"PytERJFhAKuNNuaiXkApLfWzwNwSNDACpigT3LwQfou">,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            99, 111, 110, 102, 105, 103, 95, 114, 111, 117, 116, 101, 114,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "pdaAuthority",
+            accounts.pdaAuthority.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.krfqProgram.value) {
+    accounts.krfqProgram.value =
+      "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL" as Address<"krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL">;
+  }
+  if (!accounts.krfqMetadata.value) {
+    accounts.krfqMetadata.value = await getProgramDerivedAddress({
+      programAddress:
+        "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL" as Address<"krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL">,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([109, 101, 116, 97, 100, 97, 116, 97]),
+        ),
+      ],
     });
   }
   if (!accounts.rent.value) {
@@ -471,6 +528,8 @@ export async function getTakeOrderInstructionAsync<
       getAccountMeta("sysvarInstructions", accounts.sysvarInstructions),
       getAccountMeta("permission", accounts.permission),
       getAccountMeta("configRouter", accounts.configRouter),
+      getAccountMeta("krfqProgram", accounts.krfqProgram),
+      getAccountMeta("krfqMetadata", accounts.krfqMetadata),
       getAccountMeta("inputTokenProgram", accounts.inputTokenProgram),
       getAccountMeta("outputTokenProgram", accounts.outputTokenProgram),
       getAccountMeta("rent", accounts.rent),
@@ -501,6 +560,8 @@ export async function getTakeOrderInstructionAsync<
     TAccountSysvarInstructions,
     TAccountPermission,
     TAccountConfigRouter,
+    TAccountKrfqProgram,
+    TAccountKrfqMetadata,
     TAccountInputTokenProgram,
     TAccountOutputTokenProgram,
     TAccountRent,
@@ -528,6 +589,8 @@ export type TakeOrderInput<
   TAccountSysvarInstructions extends string = string,
   TAccountPermission extends string = string,
   TAccountConfigRouter extends string = string,
+  TAccountKrfqProgram extends string = string,
+  TAccountKrfqMetadata extends string = string,
   TAccountInputTokenProgram extends string = string,
   TAccountOutputTokenProgram extends string = string,
   TAccountRent extends string = string,
@@ -548,10 +611,13 @@ export type TakeOrderInput<
   intermediaryOutputTokenAccount?: Address<TAccountIntermediaryOutputTokenAccount>;
   makerOutputAta?: Address<TAccountMakerOutputAta>;
   expressRelay?: Address<TAccountExpressRelay>;
-  expressRelayMetadata: Address<TAccountExpressRelayMetadata>;
+  expressRelayMetadata?: Address<TAccountExpressRelayMetadata>;
   sysvarInstructions?: Address<TAccountSysvarInstructions>;
   permission?: Address<TAccountPermission>;
-  configRouter: Address<TAccountConfigRouter>;
+  configRouter?: Address<TAccountConfigRouter>;
+  /** the krfq-sdk core is anchor-free and the CPI is a raw `invoke`. */
+  krfqProgram?: Address<TAccountKrfqProgram>;
+  krfqMetadata?: Address<TAccountKrfqMetadata>;
   inputTokenProgram: Address<TAccountInputTokenProgram>;
   outputTokenProgram: Address<TAccountOutputTokenProgram>;
   rent?: Address<TAccountRent>;
@@ -581,6 +647,8 @@ export function getTakeOrderInstruction<
   TAccountSysvarInstructions extends string,
   TAccountPermission extends string,
   TAccountConfigRouter extends string,
+  TAccountKrfqProgram extends string,
+  TAccountKrfqMetadata extends string,
   TAccountInputTokenProgram extends string,
   TAccountOutputTokenProgram extends string,
   TAccountRent extends string,
@@ -607,6 +675,8 @@ export function getTakeOrderInstruction<
     TAccountSysvarInstructions,
     TAccountPermission,
     TAccountConfigRouter,
+    TAccountKrfqProgram,
+    TAccountKrfqMetadata,
     TAccountInputTokenProgram,
     TAccountOutputTokenProgram,
     TAccountRent,
@@ -634,6 +704,8 @@ export function getTakeOrderInstruction<
   TAccountSysvarInstructions,
   TAccountPermission,
   TAccountConfigRouter,
+  TAccountKrfqProgram,
+  TAccountKrfqMetadata,
   TAccountInputTokenProgram,
   TAccountOutputTokenProgram,
   TAccountRent,
@@ -672,6 +744,8 @@ export function getTakeOrderInstruction<
     },
     permission: { value: input.permission ?? null, isWritable: false },
     configRouter: { value: input.configRouter ?? null, isWritable: false },
+    krfqProgram: { value: input.krfqProgram ?? null, isWritable: false },
+    krfqMetadata: { value: input.krfqMetadata ?? null, isWritable: false },
     inputTokenProgram: {
       value: input.inputTokenProgram ?? null,
       isWritable: false,
@@ -701,6 +775,10 @@ export function getTakeOrderInstruction<
   if (!accounts.sysvarInstructions.value) {
     accounts.sysvarInstructions.value =
       "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
+  if (!accounts.krfqProgram.value) {
+    accounts.krfqProgram.value =
+      "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL" as Address<"krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL">;
   }
   if (!accounts.rent.value) {
     accounts.rent.value =
@@ -734,6 +812,8 @@ export function getTakeOrderInstruction<
       getAccountMeta("sysvarInstructions", accounts.sysvarInstructions),
       getAccountMeta("permission", accounts.permission),
       getAccountMeta("configRouter", accounts.configRouter),
+      getAccountMeta("krfqProgram", accounts.krfqProgram),
+      getAccountMeta("krfqMetadata", accounts.krfqMetadata),
       getAccountMeta("inputTokenProgram", accounts.inputTokenProgram),
       getAccountMeta("outputTokenProgram", accounts.outputTokenProgram),
       getAccountMeta("rent", accounts.rent),
@@ -764,6 +844,8 @@ export function getTakeOrderInstruction<
     TAccountSysvarInstructions,
     TAccountPermission,
     TAccountConfigRouter,
+    TAccountKrfqProgram,
+    TAccountKrfqMetadata,
     TAccountInputTokenProgram,
     TAccountOutputTokenProgram,
     TAccountRent,
@@ -791,17 +873,20 @@ export type ParsedTakeOrderInstruction<
     takerOutputAta: TAccountMetas[9];
     intermediaryOutputTokenAccount?: TAccountMetas[10] | undefined;
     makerOutputAta?: TAccountMetas[11] | undefined;
-    expressRelay: TAccountMetas[12];
-    expressRelayMetadata: TAccountMetas[13];
+    expressRelay?: TAccountMetas[12] | undefined;
+    expressRelayMetadata?: TAccountMetas[13] | undefined;
     sysvarInstructions: TAccountMetas[14];
     permission?: TAccountMetas[15] | undefined;
-    configRouter: TAccountMetas[16];
-    inputTokenProgram: TAccountMetas[17];
-    outputTokenProgram: TAccountMetas[18];
-    rent: TAccountMetas[19];
-    systemProgram: TAccountMetas[20];
-    eventAuthority: TAccountMetas[21];
-    program: TAccountMetas[22];
+    configRouter?: TAccountMetas[16] | undefined;
+    /** the krfq-sdk core is anchor-free and the CPI is a raw `invoke`. */
+    krfqProgram?: TAccountMetas[17] | undefined;
+    krfqMetadata?: TAccountMetas[18] | undefined;
+    inputTokenProgram: TAccountMetas[19];
+    outputTokenProgram: TAccountMetas[20];
+    rent: TAccountMetas[21];
+    systemProgram: TAccountMetas[22];
+    eventAuthority: TAccountMetas[23];
+    program: TAccountMetas[24];
   };
   data: TakeOrderInstructionData;
 };
@@ -814,12 +899,12 @@ export function parseTakeOrderInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedTakeOrderInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 23) {
+  if (instruction.accounts.length < 25) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 23,
+        expectedAccountMetas: 25,
       },
     );
   }
@@ -850,11 +935,13 @@ export function parseTakeOrderInstruction<
       takerOutputAta: getNextAccount(),
       intermediaryOutputTokenAccount: getNextOptionalAccount(),
       makerOutputAta: getNextOptionalAccount(),
-      expressRelay: getNextAccount(),
-      expressRelayMetadata: getNextAccount(),
+      expressRelay: getNextOptionalAccount(),
+      expressRelayMetadata: getNextOptionalAccount(),
       sysvarInstructions: getNextAccount(),
       permission: getNextOptionalAccount(),
-      configRouter: getNextAccount(),
+      configRouter: getNextOptionalAccount(),
+      krfqProgram: getNextOptionalAccount(),
+      krfqMetadata: getNextOptionalAccount(),
       inputTokenProgram: getNextAccount(),
       outputTokenProgram: getNextAccount(),
       rent: getNextAccount(),

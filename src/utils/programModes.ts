@@ -42,6 +42,10 @@ const UPDATE_GLOBAL_CONFIG_MODE_VARIANTS = {
   },
   UpdateTxnFeeCost: { discriminator: 8, kind: "UpdateTxnFeeCost" },
   UpdateAtaCreationCost: { discriminator: 9, kind: "UpdateAtaCreationCost" },
+  UpdateRfqVenuesBlocked: {
+    discriminator: 10,
+    kind: "UpdateRfqVenuesBlocked",
+  },
 } as const satisfies Record<string, ModeKind>;
 
 export const UpdateGlobalConfigMode = {
