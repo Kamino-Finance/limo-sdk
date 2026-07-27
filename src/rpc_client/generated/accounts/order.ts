@@ -91,6 +91,11 @@ export type Order = {
    */
   flashStartTakerOutputBalance: bigint;
   counterparty: Address;
+  /**
+   * Lamports the maker deposited at create_order (ata_creation_cost + txn_fee_cost).
+   * Held on this account and refunded to the maker via `close = maker` at close.
+   */
+  feePaid: bigint;
   padding: Array<bigint>;
 };
 
@@ -135,6 +140,11 @@ export type OrderArgs = {
    */
   flashStartTakerOutputBalance: number | bigint;
   counterparty: Address;
+  /**
+   * Lamports the maker deposited at create_order (ata_creation_cost + txn_fee_cost).
+   * Held on this account and refunded to the maker via `close = maker` at close.
+   */
+  feePaid: number | bigint;
   padding: Array<number | bigint>;
 };
 
@@ -164,7 +174,8 @@ export function getOrderEncoder(): FixedSizeEncoder<OrderArgs> {
       ["lastUpdatedTimestamp", getU64Encoder()],
       ["flashStartTakerOutputBalance", getU64Encoder()],
       ["counterparty", getAddressEncoder()],
-      ["padding", getArrayEncoder(getU64Encoder(), { size: 15 })],
+      ["feePaid", getU64Encoder()],
+      ["padding", getArrayEncoder(getU64Encoder(), { size: 14 })],
     ]),
     (value) => ({ ...value, discriminator: ORDER_DISCRIMINATOR }),
   );
@@ -195,7 +206,8 @@ export function getOrderDecoder(): FixedSizeDecoder<Order> {
     ["lastUpdatedTimestamp", getU64Decoder()],
     ["flashStartTakerOutputBalance", getU64Decoder()],
     ["counterparty", getAddressDecoder()],
-    ["padding", getArrayDecoder(getU64Decoder(), { size: 15 })],
+    ["feePaid", getU64Decoder()],
+    ["padding", getArrayDecoder(getU64Decoder(), { size: 14 })],
   ]);
 }
 
