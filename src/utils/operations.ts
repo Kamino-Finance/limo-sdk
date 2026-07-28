@@ -19,7 +19,6 @@ import {
   getKrfqMetadataPDA,
   getPdaAuthority,
   getTokenVaultPDA,
-  KRFQ_PROGRAM_ID,
 } from "./utils";
 import {
   UpdateGlobalConfigMode,
@@ -284,6 +283,7 @@ export async function takeOrderKrfq(params: {
   makerOutputAta?: Address;
   inputTokenProgram: Address;
   outputTokenProgram: Address;
+  krfqProgramId: Address;
 }): Promise<Instruction> {
   let pdaAuthority = await getPdaAuthority(
     params.programAddress,
@@ -314,8 +314,8 @@ export async function takeOrderKrfq(params: {
       takerOutputAta: params.takerOutputAta,
       makerOutputAta: params.makerOutputAta,
       // KrfqOnly: both krfq accounts present; handler CPIs check_permission.
-      krfqProgram: KRFQ_PROGRAM_ID,
-      krfqMetadata: await getKrfqMetadataPDA(),
+      krfqProgram: params.krfqProgramId,
+      krfqMetadata: await getKrfqMetadataPDA(params.krfqProgramId),
       inputTokenProgram: params.inputTokenProgram,
       outputTokenProgram: params.outputTokenProgram,
       systemProgram: SYSTEM_PROGRAM_ADDRESS,
@@ -435,6 +435,7 @@ export async function flashTakeOrderKrfq(params: {
   makerOutputAta: Address | undefined;
   inputTokenProgram: Address;
   outputTokenProgram: Address;
+  krfqProgramId: Address;
 }): Promise<{ startIx: Instruction; endIx: Instruction }> {
   let pdaAuthority = await getPdaAuthority(
     params.programAddress,
@@ -464,8 +465,8 @@ export async function flashTakeOrderKrfq(params: {
     makerOutputAta: params.makerOutputAta,
     expressRelay: params.programAddress,
     // KrfqOnly: both krfq accounts present; handler CPIs check_permission.
-    krfqProgram: KRFQ_PROGRAM_ID,
-    krfqMetadata: await getKrfqMetadataPDA(),
+    krfqProgram: params.krfqProgramId,
+    krfqMetadata: await getKrfqMetadataPDA(params.krfqProgramId),
     inputTokenProgram: params.inputTokenProgram,
     outputTokenProgram: params.outputTokenProgram,
     systemProgram: SYSTEM_PROGRAM_ADDRESS,

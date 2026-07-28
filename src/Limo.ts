@@ -12,6 +12,7 @@ import {
   FlashTakeOrderIxs,
   getEventAuthorityPDA,
   getIntermediaryTokenAccountPDA,
+  getKrfqProgramId,
   getMintDecimals,
   getPdaAuthority,
   getTokenVaultPDA,
@@ -1921,6 +1922,7 @@ export class LimoClient {
         makerOutputAta,
         inputTokenProgram: order.state.inputMintProgramId,
         outputTokenProgram: order.state.outputMintProgramId,
+        krfqProgramId: getKrfqProgramId(),
       }),
     );
 
@@ -2268,6 +2270,7 @@ export class LimoClient {
         makerOutputAta,
         inputTokenProgram: order.state.inputMintProgramId,
         outputTokenProgram: order.state.outputMintProgramId,
+        krfqProgramId: getKrfqProgramId(),
       });
 
     return {

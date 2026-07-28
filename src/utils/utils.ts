@@ -746,10 +746,30 @@ export const KRFQ_PROGRAM_ID = address(
   "krfq8Jm1oF3SQ3jyRiVKVoaUWuMhPvfhwkpaFCr9MGL",
 );
 
+// Honors the KRFQ_PROGRAM_ID env override (e.g. staging); defaults to mainnet.
+export function getKrfqProgramId(): Address {
+  const override =
+    typeof process !== "undefined"
+      ? process.env?.KRFQ_PROGRAM_ID?.trim()
+      : undefined;
+  if (!override) {
+    return KRFQ_PROGRAM_ID;
+  }
+  try {
+    return address(override);
+  } catch {
+    throw new Error(
+      `KRFQ_PROGRAM_ID env override is not a valid address: "${override}"`,
+    );
+  }
+}
+
 // KRFQ ProgramMetadata PDA: seeds `[b"metadata"]` (krfq_sdk::cpi::find_metadata_address).
-export async function getKrfqMetadataPDA(): Promise<Address> {
+export async function getKrfqMetadataPDA(
+  krfqProgramId: Address = getKrfqProgramId(),
+): Promise<Address> {
   const [metadata] = await getProgramDerivedAddress({
-    programAddress: KRFQ_PROGRAM_ID,
+    programAddress: krfqProgramId,
     seeds: [KRFQ_METADATA_SEED],
   });
   return metadata;
