@@ -192,24 +192,30 @@ export async function getInitializeVaultInstructionAsync<
 
   // Resolve default values.
   if (!accounts.pdaAuthority.value) {
-    accounts.pdaAuthority.value = await findPdaAuthorityPda({
-      globalConfig: getAddressFromResolvedInstructionAccount(
-        "globalConfig",
-        accounts.globalConfig.value,
-      ),
-    });
+    accounts.pdaAuthority.value = await findPdaAuthorityPda(
+      {
+        globalConfig: getAddressFromResolvedInstructionAccount(
+          "globalConfig",
+          accounts.globalConfig.value,
+        ),
+      },
+      { programAddress },
+    );
   }
   if (!accounts.vault.value) {
-    accounts.vault.value = await findVaultPda({
-      globalConfig: getAddressFromResolvedInstructionAccount(
-        "globalConfig",
-        accounts.globalConfig.value,
-      ),
-      mint: getAddressFromResolvedInstructionAccount(
-        "mint",
-        accounts.mint.value,
-      ),
-    });
+    accounts.vault.value = await findVaultPda(
+      {
+        globalConfig: getAddressFromResolvedInstructionAccount(
+          "globalConfig",
+          accounts.globalConfig.value,
+        ),
+        mint: getAddressFromResolvedInstructionAccount(
+          "mint",
+          accounts.mint.value,
+        ),
+      },
+      { programAddress },
+    );
   }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =

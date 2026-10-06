@@ -247,16 +247,19 @@ export async function getCloseOrderAndClaimTipInstructionAsync<
 
   // Resolve default values.
   if (!accounts.inputVault.value) {
-    accounts.inputVault.value = await findInputVaultPda({
-      globalConfig: getAddressFromResolvedInstructionAccount(
-        "globalConfig",
-        accounts.globalConfig.value,
-      ),
-      inputMint: getAddressFromResolvedInstructionAccount(
-        "inputMint",
-        accounts.inputMint.value,
-      ),
-    });
+    accounts.inputVault.value = await findInputVaultPda(
+      {
+        globalConfig: getAddressFromResolvedInstructionAccount(
+          "globalConfig",
+          accounts.globalConfig.value,
+        ),
+        inputMint: getAddressFromResolvedInstructionAccount(
+          "inputMint",
+          accounts.inputMint.value,
+        ),
+      },
+      { programAddress },
+    );
   }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =

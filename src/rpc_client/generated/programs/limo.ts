@@ -21,6 +21,7 @@ import {
   type ClientWithRpc,
   type ClientWithTransactionPlanning,
   type ClientWithTransactionSending,
+  type ExtendedClient,
   type GetAccountInfoApi,
   type GetMultipleAccountsApi,
   type Instruction,
@@ -163,6 +164,42 @@ export function identifyLimoAccount(
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
     { accountData: data, programName: "limo" },
+  );
+}
+
+export enum LimoEvent {
+  OrderDisplay,
+  UserSwapBalanceDiffs,
+}
+
+export function identifyLimoEvent(
+  event: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
+): LimoEvent {
+  const data = "data" in event ? event.data : event;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([92, 101, 6, 158, 248, 152, 241, 60]),
+      ),
+      0,
+    )
+  ) {
+    return LimoEvent.OrderDisplay;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([139, 203, 35, 31, 25, 8, 62, 143]),
+      ),
+      0,
+    )
+  ) {
+    return LimoEvent.UserSwapBalanceDiffs;
+  }
+  throw new Error(
+    "The provided event could not be identified as a limo event.",
   );
 }
 
@@ -530,6 +567,9 @@ export type LimoPlugin = {
   accounts: LimoPluginAccounts;
   instructions: LimoPluginInstructions;
   pdas: LimoPluginPdas;
+  identifyAccount: typeof identifyLimoAccount;
+  identifyInstruction: typeof identifyLimoInstruction;
+  parseInstruction: typeof parseLimoInstruction;
 };
 
 export type LimoPluginAccounts = {
@@ -621,7 +661,7 @@ export type LimoPluginRequirements = ClientWithRpc<
 export function limoProgram() {
   return <T extends LimoPluginRequirements>(
     client: T,
-  ): Omit<T, "limo"> & { limo: LimoPlugin } => {
+  ): ExtendedClient<T, { limo: LimoPlugin }> => {
     return extendClient(client, {
       limo: <LimoPlugin>{
         accounts: {
@@ -719,6 +759,9 @@ export function limoProgram() {
           pdaAuthority: findPdaAuthorityPda,
           vault: findVaultPda,
         },
+        identifyAccount: identifyLimoAccount,
+        identifyInstruction: identifyLimoInstruction,
+        parseInstruction: parseLimoInstruction,
       },
     });
   };

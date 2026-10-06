@@ -23,6 +23,7 @@ import {
   LogUserSwapBalancesIxArgs,
   OrderDisplay,
   OrderListenerCallbackOnChange,
+  OrderListenerOptions,
   OrderStateAndAddress,
   printMultisigTx,
   printSimulateTx,
@@ -108,6 +109,25 @@ export const WRAPPED_SOL_MINT = address(
 
 export const ORDER_RENT_EXEMPTION_LAMPORTS = BigInt(3841920);
 export const MAX_CLOSE_ORDER_AND_CLAIM_TIP_ORDERS_IN_TX = 14;
+
+const ORDER_LISTENER_RECONNECT_DELAY_MS = 500;
+const ORDER_LISTENER_MAX_RECONNECT_DELAY_MS = 30_000;
+
+/** Ends the retry delay immediately when the listener is aborted. */
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export class LimoClient {
   private readonly _connection: Rpc<SolanaRpcApi>;
@@ -229,7 +249,7 @@ export class LimoClient {
 
   /**
    * Gets all orders with given filters
-   * @param filters - list of filters to apply to the get program accounts
+   * @param filters - additional program-account filters
    * @param globalConfigOverride - global config override to filter by
    * @param filterByGlobalConfig - whether to filter by global config or not
    * @returns list of order states and addresses
@@ -849,11 +869,13 @@ export class LimoClient {
    * Starts listening to order changes for a specific maker
    * @param maker - the maker address
    * @param callbackOnChange - callback to be called when an order changes
-   * @returns subscriptionId - a number of the subscription id, to be used to stop the listener
+   * @param options - error and reconnect hooks
+   * @returns controller to stop the listener, even if the first attempt failed
    */
   async listenToMakerOrders(
     maker: Address,
     callbackOnChange: OrderListenerCallbackOnChange,
+    options: OrderListenerOptions = {},
   ): Promise<AbortController> {
     const filters: SolanaKitFilter[] = [
       {
@@ -868,6 +890,7 @@ export class LimoClient {
     const abortController = await this.listenToOrdersChangeWithFilters(
       filters,
       callbackOnChange,
+      options,
     );
 
     return abortController;
@@ -879,13 +902,15 @@ export class LimoClient {
    * @param quoteTokenMint - the quote token mint
    * @param callbackOnChangeSellOrders - callback to be called when a sell order changes
    * @param callbackOnChangeBuyOrders - callback to be called when a buy order changes
-   * @returns { subscriptionIdSellOrders, subscriptionIdBuyOrders } - the subscription id for the two listeners (both should be closed when subscription no longer needed)
+   * @param options - error and reconnect hooks shared by both listeners
+   * @returns controllers to stop both listeners, even if their first attempts failed
    */
   async listenToOrderChangeForBaseAndQuote(
     baseTokenMint: Address,
     quoteTokenMint: Address,
     callbackOnChangeSellOrders: OrderListenerCallbackOnChange,
     callbackOnChangeBuyOrders: OrderListenerCallbackOnChange,
+    options: OrderListenerOptions = {},
   ): Promise<{
     abortControllerSellOrders: AbortController;
     abortControllerBuyOrders: AbortController;
@@ -928,10 +953,12 @@ export class LimoClient {
       await this.listenToOrdersChangeWithFilters(
         sellFilters,
         callbackOnChangeSellOrders,
+        options,
       );
     const abortControllerBuyOrders = await this.listenToOrdersChangeWithFilters(
       buyFilters,
       callbackOnChangeBuyOrders,
+      options,
     );
 
     return { abortControllerSellOrders, abortControllerBuyOrders };
@@ -943,13 +970,15 @@ export class LimoClient {
    * @param quoteTokenMint - the quote token mint
    * @param callbackOnChangeSellOrders - callback to be called when a sell order changes
    * @param callbackOnChangeBuyOrders - callback to be called when a buy order changes
-   * @returns { subscriptionIdSellOrders, subscriptionIdBuyOrders } - the subscription id for the two listeners (both should be closed when subscription no longer needed)
+   * @param options - error and reconnect hooks shared by both listeners
+   * @returns controllers to stop both listeners, even if their first attempts failed
    */
   async listenToOrderFillChangeForBaseAndQuote(
     baseTokenMint: Address,
     quoteTokenMint: Address,
     callbackOnChangeSellOrders: OrderListenerCallbackOnChange,
     callbackOnChangeBuyOrders: OrderListenerCallbackOnChange,
+    options: OrderListenerOptions = {},
   ): Promise<{
     abortControllerSellOrders: AbortController;
     abortControllerBuyOrders: AbortController;
@@ -996,7 +1025,7 @@ export class LimoClient {
         orderStateAndAddress.state.remainingInputAmount <
         orderStateAndAddress.state.initialInputAmount
       ) {
-        callbackOnChangeSellOrders(orderStateAndAddress, slot);
+        return callbackOnChangeSellOrders(orderStateAndAddress, slot);
       }
     };
 
@@ -1008,7 +1037,7 @@ export class LimoClient {
         orderStateAndAddress.state.remainingInputAmount <
         orderStateAndAddress.state.initialInputAmount
       ) {
-        callbackOnChangeBuyOrders(orderStateAndAddress, slot);
+        return callbackOnChangeBuyOrders(orderStateAndAddress, slot);
       }
     };
 
@@ -1016,24 +1045,34 @@ export class LimoClient {
       await this.listenToOrdersChangeWithFilters(
         sellFilters,
         callbackOnChangeSellOrdersFilledOrdersOnly,
+        options,
       );
     const abortControllerBuyOrders = await this.listenToOrdersChangeWithFilters(
       buyFilters,
       callbackOnChangeBuyOrdersFilledOrdersOnly,
+      options,
     );
 
     return { abortControllerSellOrders, abortControllerBuyOrders };
   }
 
   /**
-   * Starts listening to order changes based on the filters provided, for the global config
+   * Starts listening to order changes based on the filters provided, for the global config.
+   *
+   * Resolves after the first subscribe attempt, even if it failed. Connection
+   * failures are reported through `options.onError` and retried with capped
+   * exponential backoff. Use `options.onReconnect` to refetch changes missed
+   * while disconnected.
+   *
    * @param filters - list of filters to apply to the get program accounts
    * @param callbackOnChange - callback to be called when an order changes
-   * @returns subscriptionId - a number of the subscription id, to be used to stop the listener
+   * @param options - optional error and reconnect hooks
+   * @returns controller to stop retries and unsubscribe
    */
   async listenToOrdersChangeWithFilters(
     filters: SolanaKitFilter[],
     callbackOnChange: OrderListenerCallbackOnChange,
+    options: OrderListenerOptions = {},
   ): Promise<AbortController> {
     filters.push({
       memcmp: {
@@ -1046,49 +1085,124 @@ export class LimoClient {
       dataSize: BigInt(getOrderSize()),
     });
 
-    const callbackOnChangeWtihDecoding = async (
-      keyedAccountInfo: AccountInfoWithPubkey<
-        AccountInfoBase & AccountInfoWithBase64EncodedData
-      >,
-      context: {
-        slot: Slot;
-      },
-    ) => {
-      if (keyedAccountInfo.account === null) {
-        throw new Error("Invalid account");
-      }
-      if (keyedAccountInfo.account.owner !== this.programAddress) {
-        throw new Error("account doesn't belong to this program");
-      }
-
-      const [base64Data, encoding] = keyedAccountInfo.account.data;
-      const order = getOrderDecoder().decode(Buffer.from(base64Data, encoding));
-
-      callbackOnChange(
-        {
-          state: order,
-          address: keyedAccountInfo.pubkey,
-        },
-        context.slot,
-      );
-    };
     const abortController = new AbortController();
-
-    const subscriptionId = await this._subscription
-      .programNotifications(this.programAddress, {
-        commitment: "confirmed",
-        encoding: "base64",
+    await new Promise<void>((settleFirstAttempt) => {
+      void this.runOrdersSubscriptionLoop(
         filters,
-      })
-      .subscribe({ abortSignal: abortController.signal });
-
-    (async () => {
-      for await (const notification of subscriptionId) {
-        callbackOnChangeWtihDecoding(notification.value, notification.context);
-      }
-    })();
+        callbackOnChange,
+        abortController.signal,
+        options,
+        settleFirstAttempt,
+      );
+    });
 
     return abortController;
+  }
+
+  /** Retries connection failures and consumes notifications until aborted. */
+  private async runOrdersSubscriptionLoop(
+    filters: SolanaKitFilter[],
+    callbackOnChange: OrderListenerCallbackOnChange,
+    signal: AbortSignal,
+    { onError, onReconnect }: OrderListenerOptions,
+    settleFirstAttempt: () => void,
+  ): Promise<void> {
+    // A hook that throws or rejects must not tear down the subscription.
+    const reportError = (error: unknown) => {
+      Promise.resolve()
+        .then(() => (onError ?? console.error)(error))
+        .catch(() => {});
+    };
+    const notifyReconnect = () => {
+      Promise.resolve()
+        .then(() => onReconnect?.())
+        .catch(reportError);
+    };
+
+    let consecutiveFailures = 0;
+    let attemptCount = 0;
+
+    while (!signal.aborted) {
+      let delay = ORDER_LISTENER_RECONNECT_DELAY_MS;
+      // Solana Kit caches rejected subscriptions until all subscribers abort.
+      // A fresh controller lets each failed attempt leave the cache before retrying.
+      const attempt = new AbortController();
+      const abortAttempt = () => attempt.abort();
+      signal.addEventListener("abort", abortAttempt, { once: true });
+      attemptCount++;
+
+      try {
+        const notifications = await this._subscription
+          .programNotifications(this.programAddress, {
+            commitment: "confirmed",
+            encoding: "base64",
+            filters,
+          })
+          .subscribe({ abortSignal: attempt.signal });
+        settleFirstAttempt();
+
+        // Failed initial attempts also leave a gap that needs a refetch.
+        if (attemptCount > 1) {
+          notifyReconnect();
+        }
+
+        for await (const notification of notifications) {
+          if (signal.aborted) break;
+          consecutiveFailures = 0;
+          Promise.resolve()
+            .then(() =>
+              this.decodeAndEmitOrder(
+                notification.value,
+                notification.context.slot,
+                callbackOnChange,
+              ),
+            )
+            .catch(reportError);
+        }
+      } catch (e) {
+        settleFirstAttempt();
+        if (!signal.aborted) {
+          reportError(e);
+          delay = Math.min(
+            ORDER_LISTENER_RECONNECT_DELAY_MS * 2 ** consecutiveFailures,
+            ORDER_LISTENER_MAX_RECONNECT_DELAY_MS,
+          );
+          consecutiveFailures++;
+        }
+      } finally {
+        signal.removeEventListener("abort", abortAttempt);
+        attempt.abort();
+      }
+
+      await abortableSleep(delay, signal);
+    }
+  }
+
+  private decodeAndEmitOrder(
+    keyedAccountInfo: AccountInfoWithPubkey<
+      AccountInfoBase & AccountInfoWithBase64EncodedData
+    >,
+    slot: Slot,
+    callbackOnChange: OrderListenerCallbackOnChange,
+  ): void {
+    if (keyedAccountInfo.account === null) {
+      throw new Error("Invalid account");
+    }
+    if (keyedAccountInfo.account.owner !== this.programAddress) {
+      throw new Error("account doesn't belong to this program");
+    }
+
+    const [base64Data, encoding] = keyedAccountInfo.account.data;
+    const order = getOrderDecoder().decode(Buffer.from(base64Data, encoding));
+
+    // Typed void, but an async callback's promise flows back so the loop can catch its rejection.
+    return callbackOnChange(
+      {
+        state: order,
+        address: keyedAccountInfo.pubkey,
+      },
+      slot,
+    );
   }
 
   /**

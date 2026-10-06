@@ -57,6 +57,20 @@ export type OrderListenerCallbackOnChange = (
   slot: Slot,
 ) => void;
 
+export interface OrderListenerOptions {
+  /**
+   * Receives connection and decoding failures, order callback throws or
+   * rejections, and reconnect hook failures. Defaults to `console.error`.
+   */
+  onError?: (error: unknown) => void;
+  /**
+   * Refetch missed changes after a successful retry, including recovery from
+   * an initial connection failure. Skips a successful first attempt.
+   * Returned promise rejections are reported through `onError`.
+   */
+  onReconnect?: () => void;
+}
+
 export class FilledOrderQueue<V> {
   private queue: FilledOrder[];
   private maxSize: number;

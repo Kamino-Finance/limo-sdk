@@ -221,12 +221,15 @@ export async function getAssertUserSwapBalancesEndInstructionAsync<
 
   // Resolve default values.
   if (!accounts.userSwapBalanceState.value) {
-    accounts.userSwapBalanceState.value = await findUserSwapBalanceStatePda({
-      maker: getAddressFromResolvedInstructionAccount(
-        "maker",
-        accounts.maker.value,
-      ),
-    });
+    accounts.userSwapBalanceState.value = await findUserSwapBalanceStatePda(
+      {
+        maker: getAddressFromResolvedInstructionAccount(
+          "maker",
+          accounts.maker.value,
+        ),
+      },
+      { programAddress },
+    );
   }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =

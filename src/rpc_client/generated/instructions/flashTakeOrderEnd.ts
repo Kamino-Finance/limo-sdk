@@ -427,25 +427,31 @@ export async function getFlashTakeOrderEndInstructionAsync<
 
   // Resolve default values.
   if (!accounts.inputVault.value) {
-    accounts.inputVault.value = await findInputVaultPda({
-      globalConfig: getAddressFromResolvedInstructionAccount(
-        "globalConfig",
-        accounts.globalConfig.value,
-      ),
-      inputMint: getAddressFromResolvedInstructionAccount(
-        "inputMint",
-        accounts.inputMint.value,
-      ),
-    });
+    accounts.inputVault.value = await findInputVaultPda(
+      {
+        globalConfig: getAddressFromResolvedInstructionAccount(
+          "globalConfig",
+          accounts.globalConfig.value,
+        ),
+        inputMint: getAddressFromResolvedInstructionAccount(
+          "inputMint",
+          accounts.inputMint.value,
+        ),
+      },
+      { programAddress },
+    );
   }
   if (!accounts.intermediaryOutputTokenAccount.value) {
     accounts.intermediaryOutputTokenAccount.value =
-      await findIntermediaryOutputTokenAccountPda({
-        order: getAddressFromResolvedInstructionAccount(
-          "order",
-          accounts.order.value,
-        ),
-      });
+      await findIntermediaryOutputTokenAccountPda(
+        {
+          order: getAddressFromResolvedInstructionAccount(
+            "order",
+            accounts.order.value,
+          ),
+        },
+        { programAddress },
+      );
   }
   if (!accounts.expressRelay.value) {
     accounts.expressRelay.value =

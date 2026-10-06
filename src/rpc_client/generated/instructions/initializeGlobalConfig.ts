@@ -150,12 +150,15 @@ export async function getInitializeGlobalConfigInstructionAsync<
 
   // Resolve default values.
   if (!accounts.pdaAuthority.value) {
-    accounts.pdaAuthority.value = await findPdaAuthorityPda({
-      globalConfig: getAddressFromResolvedInstructionAccount(
-        "globalConfig",
-        accounts.globalConfig.value,
-      ),
-    });
+    accounts.pdaAuthority.value = await findPdaAuthorityPda(
+      {
+        globalConfig: getAddressFromResolvedInstructionAccount(
+          "globalConfig",
+          accounts.globalConfig.value,
+        ),
+      },
+      { programAddress },
+    );
   }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
